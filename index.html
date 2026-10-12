@@ -1832,11 +1832,22 @@ const Brain = {
       // Ask for the memory size from Settings. If the graphics chip cannot hold it, step down to a smaller one.
       const target = ctxTarget(m);
       const ladder = [...new Set([target, 16384, 8192, 4096].filter(c => c <= target))];
-      let lastErr = null, restarts = 0;
+      let lastErr = null, restarts = 0, repairs = 0;
       for (let i = 0; i < ladder.length; i++) {
         const ctx = ladder[i];
         try { await guarded(ctx); lastErr = null; break; }
         catch (e) {
+          /* A saved model file that is empty or cut short (for example a download that was interrupted) cannot be read.
+             Delete the saved copy of this model and download it again, once, by itself. */
+          if (BROKEN_FILES_RE.test(String(e?.message || e)) && repairs++ < 1 && token === this.loadToken) {
+            console.warn('A saved model file is broken; deleting it and downloading it again.', e);
+            await this.teardown(); this.progress = 0;
+            for (const mid of Object.values(m.ids)) { try { await lib.deleteModelAllInfoInCache(mid, this.appConfig(lib)); } catch {} }
+            this.cached[key] = false; wasCached = false; this.wasCached = false;
+            this.phase = 'A saved file was broken. Downloading it again'; this.emit();
+            i--; continue;
+          }
+          if (BROKEN_FILES_RE.test(String(e?.message || e))) throw e;   // a smaller memory size cannot fix a broken file
           if (e?.stalled) {
             await this.teardown(); this.progress = 0;
             if (wasCached && restarts++ < 1 && token === this.loadToken) { console.warn('Loading did not start; restarting it once.'); this.phase = 'Restarting'; this.stalled = false; this.emit(); i--; continue; }
@@ -1927,8 +1938,10 @@ async function pickCacheBackend() {
 }
 
 function isNetworkError(e) { return /failed to fetch|networkerror|network error|load failed|err_internet|offline/i.test(String(e?.message || e)); }
+const BROKEN_FILES_RE = /exceeds shard size|Tensor-cache record|shard size|checksum|corrupt|unexpected end of|Unexpected EOF/i;
 function friendlyError(e) {
   const msg = String(e?.message || e || 'Unknown error');
+  if (BROKEN_FILES_RE.test(msg)) return 'The saved model files are broken (a download was probably cut short). Lumen tried to delete them and download them again, but it did not work. Open Settings → Model, press “Delete download” on this model, and download it again on a stable connection.';
   if (/^module:/i.test(msg)) return 'The AI engine could not be loaded. The internet is needed the first time. Check your connection, then reload the page.';
   if (isNetworkError(msg)) return 'The download stopped because the internet connection was lost. Parts that finished are saved. Check your connection and try again.';
   if (/context ?window|ContextWindowSizeExceeded|prompt.*(too long|exceed)/i.test(msg)) return 'This message is too long for the model to read at once. Shorten it, or start a new chat.';
