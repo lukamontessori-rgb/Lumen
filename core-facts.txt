@@ -1,0 +1,331 @@
+# Lumen core facts. One fact per line:  category | as-of (stable or YYYY-MM or YYYY-MM-DD) | fact | source (short name)
+# Source: research report of 11 October 2026 (time-sensitive facts checked against live sources) plus standard reference values.
+# Items the report said were NOT verified are left out on purpose.
+
+sci|stable|There are seven SI base units: metre (length), kilogram (mass), second (time), ampere (electric current), kelvin (temperature), mole (amount of substance) and candela (luminous intensity).|BIPM
+sci|stable|Since 20 May 2019 all SI base units are defined by fixed constants of nature.|BIPM
+sci|stable|The speed of light in a vacuum is exactly 299,792,458 metres per second, about 300,000 km/s.|BIPM
+sci|stable|The Planck constant is exactly 6.62607015 × 10^-34 joule-seconds.|BIPM
+sci|stable|The Avogadro constant is exactly 6.02214076 × 10^23 per mole.|BIPM
+sci|stable|The gravitational constant G is about 6.674 × 10^-11 N·m²/kg².|NIST
+sci|stable|Standard gravity (gravitational acceleration) at Earth's surface is 9.80665 m/s², usually rounded to 9.81 m/s².|BIPM
+sci|stable|Newton's first law: an object stays at rest or keeps moving in a straight line at constant speed unless a net force acts on it.
+sci|stable|Newton's second law of motion: force equals mass times acceleration (F = ma).
+sci|stable|Newton's third law: every action has an equal and opposite reaction.
+sci|stable|Conservation of energy: energy cannot be created or destroyed, only changed from one form to another.
+sci|stable|Einstein's mass-energy equation is E = mc².
+sci|stable|Ohm's law: voltage equals current times resistance (V = IR). Electrical power equals voltage times current (P = VI).
+sci|stable|Absolute zero is 0 kelvin, which is -273.15 °C, the lowest possible temperature.
+sci|stable|At sea level water freezes at 0 °C (32 °F) and boils at 100 °C (212 °F).
+sci|stable|The four fundamental forces are gravity, electromagnetism, the strong nuclear force and the weak nuclear force.
+sci|stable|There are 118 confirmed chemical elements.|IUPAC
+sci|stable|Hydrogen (symbol H, atomic number 1) is the lightest element and the most abundant element in the universe.
+sci|stable|Oxygen is the most abundant element in Earth's crust, followed by silicon.
+sci|stable|Dry air is about 78% nitrogen, 21% oxygen, 0.9% argon and about 0.04% carbon dioxide (over 420 ppm in the 2020s).|NOAA
+sci|stable|An atom has protons and neutrons in its nucleus and electrons around it. The atomic number is the number of protons.
+sci|stable|The periodic table orders the chemical elements by atomic number. Columns are groups and rows are periods. Dmitri Mendeleev published the first widely used periodic table in 1869.
+sci|stable|Water is H2O, table salt is NaCl, carbon dioxide is CO2 and methane is CH4.
+sci|stable|The pH scale runs from 0 to 14. Below 7 is acidic, 7 is neutral (pure water) and above 7 is basic (alkaline).
+sci|stable|Photosynthesis: 6 CO2 + 6 H2O + light energy gives glucose (C6H12O6) + 6 O2.
+sci|stable|Cell respiration is roughly the reverse of photosynthesis: glucose + oxygen gives carbon dioxide + water + energy.
+sci|stable|The cell is the basic unit of life. Prokaryotes (bacteria, archaea) have no nucleus, eukaryotes (animals, plants, fungi) do.
+sci|stable|Mitochondria release energy from food in cells. Chloroplasts carry out photosynthesis in plant cells.
+sci|stable|DNA carries genetic information. The double-helix structure of DNA was described in 1953 by James Watson and Francis Crick, using X-ray data from Rosalind Franklin and Maurice Wilkins.
+sci|stable|Humans normally have 46 chromosomes (23 pairs) and about 20,000 protein-coding genes.
+sci|stable|Charles Darwin published On the Origin of Species in 1859, explaining evolution by natural selection.
+sci|stable|Gregor Mendel discovered the basic laws of inheritance using pea plants (published 1866).
+sci|stable|An adult human skeleton has 206 bones. The femur (thigh bone) is the longest bone.
+sci|stable|The human heart has four chambers (two atria and two ventricles). A resting adult heart beats about 60 to 100 times per minute.
+sci|stable|The main ABO blood groups are A, B, AB and O, each Rh-positive or Rh-negative. O-negative is the universal donor for red blood cells.
+sci|stable|The skin is the largest organ of the human body. The liver is the largest internal organ.
+sci|stable|The main human body systems are circulatory, respiratory, digestive, nervous, skeletal, muscular, immune, endocrine, urinary, reproductive and integumentary (skin).
+sci|stable|In a food chain, producers (plants) are eaten by primary consumers (herbivores), then secondary and tertiary consumers. Decomposers recycle nutrients.
+sci|stable|Earth is about 4.54 billion years old.
+sci|stable|Earth's layers are the crust, mantle, outer core (liquid) and inner core (solid).
+sci|stable|Earth's lithosphere is broken into tectonic plates that move a few centimetres per year. Earthquakes, volcanoes and mountain ranges form mostly at plate boundaries.
+sci|stable|The layers of Earth's atmosphere from the ground up are the troposphere (weather happens here), stratosphere (ozone layer), mesosphere, thermosphere and exosphere.
+sci|stable|The greenhouse effect: gases such as carbon dioxide, methane and water vapour trap heat in the atmosphere. Human emissions have strengthened it, causing global warming (climate change).
+sci|stable|Under the Paris Agreement (2015) countries aim to limit global warming to well below 2 °C, and ideally 1.5 °C, above pre-industrial levels.
+sci|stable|The Solar System has eight planets in order from the Sun: Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus and Neptune.|IAU
+sci|stable|Pluto was reclassified as a dwarf planet in 2006 by the IAU.|IAU
+sci|stable|Jupiter is the largest planet in the Solar System. Venus is the hottest planet. Mercury is the closest planet to the Sun.
+sci|2025-03|Saturn has the most known moons: 274 confirmed in 2025 (NASA), after 128 new small moons were confirmed in March 2025. The number keeps changing.|NASA
+sci|stable|The average Earth-Sun distance is 1 astronomical unit (AU), about 149.6 million km. Sunlight takes about 8 minutes 20 seconds to reach Earth.
+sci|stable|The Moon is on average about 384,400 km from Earth.
+sci|stable|The universe is about 13.8 billion years old. Our galaxy is called the Milky Way.
+sci|stable|Sputnik 1, the first artificial satellite, was launched by the Soviet Union on 4 October 1957.
+sci|stable|Yuri Gagarin became the first human in space on 12 April 1961.
+sci|stable|Apollo 11 landed the first humans on the Moon on 20 July 1969: Neil Armstrong and Buzz Aldrin walked on it, Michael Collins stayed in orbit.
+sci|stable|The last crewed Moon landing before Artemis was Apollo 17 in December 1972.
+sci|2026-04|Artemis II launched on 1 April 2026 from Kennedy Space Center on NASA's SLS rocket. It was the first crewed flight to the Moon since 1972.|NASA
+sci|2026-04|The Artemis II crew were Reid Wiseman (commander), Victor Glover (pilot), Christina Koch and Jeremy Hansen of the Canadian Space Agency.|NASA
+sci|2026-04|Artemis II flew around the Moon and splashed down in the Pacific Ocean off San Diego on 10 April 2026 (US time).|NASA
+sci|2026-04|The Artemis II crew set a record for the farthest humans have travelled from Earth: 406,771 km (252,756 miles).|Britannica
+sci|2026-02|NASA's Administrator as of early 2026 is Jared Isaacman.|NASA
+sci|2026-02|SpaceX Crew-12 launched to the International Space Station on 13 February 2026.|Wikipedia
+sci|2026-08|A total solar eclipse crossed Greenland, Iceland, Portugal and northern Spain on 12 August 2026.|Britannica
+
+math|stable|Pi (π) is about 3.14159. It is the ratio of a circle's circumference to its diameter.
+math|stable|The number e is about 2.71828. It is the base of natural logarithms.
+math|stable|Pythagoras' theorem: in a right triangle a² + b² = c², where c is the hypotenuse.
+math|stable|The quadratic formula: for ax² + bx + c = 0, x = (-b ± √(b² - 4ac)) / 2a.
+math|stable|Circle area is πr². Circle circumference is 2πr.
+math|stable|Rectangle area is length times width. Triangle area is one half times base times height.
+math|stable|Sphere volume is (4/3)πr³. Cylinder volume is πr²h.
+math|stable|The angles in a triangle add up to 180 degrees. The angles in a quadrilateral add up to 360 degrees.
+math|stable|A prime number has exactly two divisors, 1 and itself. 2 is the only even prime. Euclid proved there are infinitely many primes.
+math|stable|Exponent rules: a^m × a^n = a^(m+n); (a^m)^n = a^(mn); a^0 = 1 (for a not zero).
+math|stable|The equation of a straight line is y = mx + b, where m is the slope.
+math|stable|Statistics: the mean is the average, the median is the middle value, the mode is the most frequent value, the range is maximum minus minimum.
+math|stable|In a normal distribution about 68% of values lie within 1 standard deviation of the mean, about 95% within 2 and about 99.7% within 3.
+math|stable|Fermat's Last Theorem says a^n + b^n = c^n has no whole-number solutions for n greater than 2. Andrew Wiles proved it (1994, published 1995).
+math|stable|SOH-CAH-TOA: sine = opposite/hypotenuse, cosine = adjacent/hypotenuse, tangent = opposite/adjacent.
+
+hist|stable|About 300,000 years ago Homo sapiens appeared in Africa.
+hist|stable|About 10,000 BCE farming began in the Fertile Crescent (the Neolithic Revolution).
+hist|stable|About 3200 BCE writing (cuneiform) appeared in Sumer in Mesopotamia. Egyptian hieroglyphs appeared at about the same time.
+hist|stable|The Great Pyramid of Giza was completed about 2560 BCE.
+hist|stable|776 BCE is the traditional date of the first ancient Olympic Games. 753 BCE is the legendary date of the founding of Rome.
+hist|stable|In the 5th century BCE Athens developed classical democracy. Confucius and the Buddha lived around that time.
+hist|stable|Alexander the Great reigned from 336 to 323 BCE.
+hist|stable|In 221 BCE Qin Shi Huang unified China and became its first emperor.
+hist|stable|In 27 BCE Augustus became the first Roman emperor.
+hist|stable|The Western Roman Empire fell in 476 CE.
+hist|stable|In 622 CE Muhammad made the Hijra to Medina. This is year 1 of the Islamic calendar.
+hist|stable|Magna Carta was sealed in England in 1215.
+hist|stable|In the 13th century the Mongol Empire under Genghis Khan and his successors became the largest contiguous land empire in history.
+hist|stable|The Black Death (1347 to 1351) killed perhaps a third or more of Europe's population.
+hist|stable|About 1440 Johannes Gutenberg developed the movable-type printing press in Europe.
+hist|stable|In 1453 the Ottomans captured Constantinople, ending the Byzantine Empire.
+hist|stable|In 1492 Christopher Columbus reached the Americas.
+hist|stable|In 1517 Martin Luther's 95 Theses began the Protestant Reformation.
+hist|stable|The Industrial Revolution took place from about 1760 to 1840, beginning in Britain.
+hist|stable|The US Declaration of Independence was adopted on 4 July 1776.
+hist|stable|The French Revolution began in 1789 with the storming of the Bastille on 14 July.
+hist|stable|Napoleon was defeated at the Battle of Waterloo in 1815.
+hist|stable|The American Civil War lasted from 1861 to 1865. Slavery was abolished in the US by the 13th Amendment in 1865.
+hist|stable|World War I lasted from 1914 to 1918. It was triggered by the assassination of Archduke Franz Ferdinand in Sarajevo on 28 June 1914.
+hist|stable|The Russian Revolution took place in 1917. The USSR (Soviet Union) was formed in 1922.
+hist|stable|In 1918 the Kingdom of Serbs, Croats and Slovenes was created. It was renamed Yugoslavia in 1929.
+hist|stable|The Wall Street Crash of 1929 began the Great Depression.
+hist|stable|World War II lasted from 1 September 1939 (Germany invaded Poland) to 2 September 1945 (Japan surrendered). About six million Jews were murdered in the Holocaust.
+hist|stable|The United Nations was founded in 1945 (its Charter came into force on 24 October 1945). Atomic bombs were dropped on Hiroshima (6 August 1945) and Nagasaki (9 August 1945).
+hist|stable|India and Pakistan became independent in 1947. Israel was founded in 1948 and the Universal Declaration of Human Rights was adopted in 1948.
+hist|stable|NATO was founded in 1949. The People's Republic of China was proclaimed in 1949.
+hist|stable|The Cold War between the US-led West and the Soviet bloc lasted from about 1947 to 1991.
+hist|stable|Most of Africa and Asia was decolonised between 1957 and the 1970s. Ghana became independent in 1957 and 17 African countries in 1960.
+hist|stable|The Treaty of Rome of 1957 created the European Economic Community, the forerunner of the EU.
+hist|stable|The Cuban Missile Crisis took place in 1962. The Vietnam War lasted from 1955 to 1975.
+hist|stable|The Berlin Wall fell on 9 November 1989. Germany was reunified on 3 October 1990.
+hist|stable|The Soviet Union dissolved on 26 December 1991.
+hist|stable|The European Union was created by the Maastricht Treaty (in force 1993).
+hist|stable|In 1994 apartheid ended in South Africa and Nelson Mandela was elected president. The Rwandan genocide also took place in 1994.
+hist|stable|On 11 September 2001 the 9/11 terrorist attacks hit the United States.
+hist|stable|On 1 May 2004 the EU's largest enlargement took place: 10 countries joined, including Slovenia.
+hist|stable|The global financial crisis lasted from 2007 to 2009.
+hist|stable|The United Kingdom left the European Union (Brexit) on 31 January 2020.
+hist|stable|The COVID-19 pandemic lasted from 2020 to 2023. WHO declared it a pandemic on 11 March 2020 and ended the global health emergency on 5 May 2023.
+hist|stable|On 24 February 2022 Russia launched its full-scale invasion of Ukraine.
+hist|stable|On 7 October 2023 Hamas attacked Israel, starting the Gaza war.
+
+geo|stable|There are seven continents. By area: Asia, Africa, North America, South America, Antarctica, Europe, Australia/Oceania.
+geo|stable|There are five oceans. By size: Pacific (largest and deepest), Atlantic, Indian, Southern, Arctic.
+geo|2024-07|World population was 8.2 billion in 2024 and is projected to peak at about 10.3 billion in the mid-2080s.|UN WPP 2024
+geo|2023-04|India has been the most populous country since 2023, ahead of China.|UN
+geo|stable|The largest country by area is Russia (about 17.1 million km²). The smallest country is Vatican City (about 0.44 km²).
+geo|stable|The highest mountain on Earth is Mount Everest, 8,849 m (China-Nepal survey, 2020). K2 (8,611 m) is second.
+geo|stable|The deepest point in the ocean is the Challenger Deep in the Mariana Trench, about 10,900 to 11,000 m deep.
+geo|stable|The longest river is the Nile (about 6,650 km) or the Amazon; this is disputed and depends on how they are measured. The Amazon carries by far the most water.
+geo|stable|The largest hot desert is the Sahara. Antarctica is the largest desert of all (a desert is defined by low precipitation).
+geo|stable|The largest lake by area is the Caspian Sea. The deepest and oldest lake is Lake Baikal.
+geo|stable|The largest city areas include Tokyo, Delhi, Shanghai, Dhaka, São Paulo, Cairo and Mexico City. Rankings vary by definition.
+geo|2025-01|China: capital Beijing, language Mandarin Chinese, currency renminbi (yuan), population about 1.41 billion.
+geo|2025-01|India: capital New Delhi, languages Hindi and English, currency Indian rupee, population about 1.46 billion.
+geo|2025-01|United States: capital Washington, D.C., language English (de facto; designated official by a 2025 executive order), currency US dollar, population about 340 to 347 million.
+geo|2025-01|Indonesia: capital Jakarta (moving to Nusantara), language Indonesian, currency rupiah, population about 285 million.
+geo|2025-01|Pakistan: capital Islamabad, languages Urdu and English, currency Pakistani rupee, population about 250 million.
+geo|2025-01|Nigeria: capital Abuja, language English, currency naira, population about 235 million.
+geo|2025-01|Brazil: capital Brasília, language Portuguese, currency real, population about 213 million.
+geo|2025-01|Russia: capital Moscow, language Russian, currency ruble, population about 144 million.
+geo|2025-01|Mexico: capital Mexico City, language Spanish (de facto), currency Mexican peso, population about 131 million.
+geo|2025-01|Japan: capital Tokyo, language Japanese, currency yen, population about 123 million.
+geo|2025-01|United Kingdom (UK, Britain): capital London, language English, currency pound sterling, population about 69 million.
+geo|2025-01|Canada: capital Ottawa, languages English and French, currency Canadian dollar, population about 41 million.
+geo|2025-01|Australia: capital Canberra, language English (de facto), currency Australian dollar, population about 27 million.
+geo|stable|South Africa has three capitals: Pretoria (executive), Cape Town (legislative) and Bloemfontein (judicial). It has 12 official languages and the currency is the rand.
+geo|stable|Switzerland: capital Bern, languages German, French, Italian and Romansh, currency Swiss franc.
+geo|stable|The 27 EU member states and their capitals: Austria (Vienna), Belgium (Brussels), Bulgaria (Sofia), Croatia (Zagreb), Cyprus (Nicosia), Czech Republic (Prague), Denmark (Copenhagen), Estonia (Tallinn), Finland (Helsinki).
+geo|stable|The 27 EU member states and their capitals, continued: France (Paris), Germany (Berlin), Greece (Athens), Hungary (Budapest), Ireland (Dublin), Italy (Rome), Latvia (Riga), Lithuania (Vilnius), Luxembourg (Luxembourg).
+geo|stable|The 27 EU member states and their capitals, continued: Malta (Valletta), Netherlands (Amsterdam; the government sits in The Hague), Poland (Warsaw), Portugal (Lisbon), Romania (Bucharest), Slovakia (Bratislava), Slovenia (Ljubljana), Spain (Madrid), Sweden (Stockholm).
+geo|2026-01|Bulgaria adopted the euro on 1 January 2026 and became the 21st euro-area country. The euro is used by 21 EU countries.|ECB
+geo|2026-01|EU members that do not use the euro (2026): Czech Republic (koruna), Denmark (krone), Hungary (forint), Poland (złoty), Romania (leu), Sweden (krona).|ECB
+
+gov|2026-10|The President of the United States is Donald Trump, in office since 20 January 2025 (second term). The Vice President is JD Vance. US midterm elections are on 3 November 2026.|Britannica
+gov|2026-07|The Prime Minister of the United Kingdom (UK, Britain) is Andy Burnham since 20 July 2026, after Keir Starmer resigned (Starmer announced his resignation on 22 June 2026). The monarch is King Charles III.|Britannica
+gov|2026-02|The Prime Minister of Japan is Sanae Takaichi (LDP) since 21 October 2025, Japan's first female prime minister. Her ruling bloc won the general election of 8 February 2026.|Japan PM Office
+gov|2026-10|China: President and Communist Party General Secretary Xi Jinping; Premier Li Qiang.
+gov|2026-10|Russia: President Vladimir Putin. India: Prime Minister Narendra Modi. Ukraine: President Volodymyr Zelenskyy.
+gov|2026-10|The Prime Minister of Canada is Mark Carney.|Wikipedia
+gov|2026-10|Brazil: President Luiz Inácio Lula da Silva. The first round of the presidential election on 4 October 2026 had no majority, so a runoff between Lula and Flávio Bolsonaro is due later in October 2026.|Britannica
+gov|2026-03|Iran: Supreme Leader Mojtaba Khamenei, son of Ali Khamenei, was elected by Iran's Assembly of Experts in March 2026 after Ali Khamenei was killed on 28 February 2026.|Al Jazeera
+gov|2026-01|Venezuela: former President Nicolás Maduro was captured by US forces on 3 January 2026 and charged in New York.|Britannica
+gov|2025-05|The Pope is Leo XIV (born Robert Francis Prevost, from the United States), elected on 8 May 2025 after Pope Francis died on 21 April 2025. His first encyclical, Magnifica humanitas, was published on 25 May 2026 and warns about the risks of AI.|Britannica
+gov|2026-08|Norway: King Haakon VIII since 28 August 2026, after the death of King Harald V.|Britannica
+gov|2026-10|Austria: Federal Chancellor Christian Stocker. Belgium: Prime Minister Bart De Wever. Bulgaria: Prime Minister Rumen Radev (since 8 May 2026). Croatia: Prime Minister Andrej Plenković.|Consilium
+gov|2026-10|Cyprus: President Nikos Christodoulides (head of state and head of government). Czech Republic: Prime Minister Andrej Babiš. Denmark: Prime Minister Mette Frederiksen. Estonia: Prime Minister Kristen Michal.|Consilium
+gov|2026-10|Finland: Prime Minister Petteri Orpo. Germany: Federal Chancellor Friedrich Merz (since 6 May 2025). Greece: Prime Minister Kyriakos Mitsotakis. Ireland: Taoiseach Micheál Martin. Italy: Prime Minister Giorgia Meloni.|Consilium
+gov|2026-10|France: President Emmanuel Macron; Prime Minister Sébastien Lecornu (appointed 9 September 2025, reappointed 10 October 2025, leads a minority government).|Consilium
+gov|2026-05|Hungary: Prime Minister Péter Magyar (Tisza) since 9 May 2026, ending Viktor Orbán's 16 years in power after the election of 12 April 2026, where Tisza won a two-thirds majority.|Euronews
+gov|2026-05|Latvia: Prime Minister Andris Kulbergs (since 28 May 2026). Luxembourg: Prime Minister Luc Frieden. Malta: Prime Minister Robert Abela. Netherlands: Prime Minister Rob Jetten.|Consilium
+gov|2026-10|Poland: Prime Minister Donald Tusk. Portugal: Prime Minister Luís Montenegro. Slovakia: Prime Minister Robert Fico. Spain: Prime Minister Pedro Sánchez. Sweden: Prime Minister Ulf Kristersson.|Consilium
+gov|2026-10|Lithuania is represented on the European Council by President Gitanas Nausėda. Romania is represented by President Nicușor Dan.|Consilium
+gov|2026-12|UN Secretary-General: António Guterres (Portugal). His term ends on 31 December 2026. The Security Council's fifth straw poll on 7 October 2026 showed no clear winner. Candidates include Rebeca Grynspan (Costa Rica) and Rafael Grossi (Argentina).|PassBlue
+gov|stable|The UN Secretary-General is appointed by the General Assembly on the recommendation of the Security Council. The five permanent members (China, France, Russia, UK, US) can veto.|UN Charter
+gov|2026-10|NATO Secretary General: Mark Rutte, since 1 October 2024. NATO has 32 members (Finland joined in 2023, Sweden in 2024).|nato.int
+gov|2026-10|WHO Director-General: Tedros Adhanom Ghebreyesus. His term ends on 15 August 2027 and the race to succeed him is under way.|WHO
+gov|2026-10|IMF Managing Director: Kristalina Georgieva. World Bank Group President: Ajay Banga (since 2 June 2023). WTO Director-General: Ngozi Okonjo-Iweala (second term from 1 September 2025).
+gov|2026-10|European Commission President: Ursula von der Leyen (since 1 December 2019, re-elected 18 July 2024). European Council President: António Costa (since 1 December 2024). European Parliament President: Roberta Metsola.|Consilium
+gov|2026-10|The presidency of the Council of the EU is held by Ireland from 1 July to 31 December 2026, after Cyprus (January to June 2026). The Eurogroup president is Kyriakos Pierrakakis.|Consilium
+gov|stable|The G7 members are Canada, France, Germany, Italy, Japan, the United Kingdom and the United States (plus the EU). The G20 has 19 countries plus the EU and the African Union.
+gov|2026-05|The United Arab Emirates withdrew from OPEC on 1 May 2026.|Britannica
+gov|stable|Presidential system: the president is both head of state and head of government (example: the United States). Parliamentary system: the prime minister depends on parliament's confidence (examples: UK, Germany, Slovenia). Semi-presidential system: an elected president and a prime minister share power (example: France).
+gov|stable|A constitutional monarchy has a hereditary monarch with mostly ceremonial power (examples: UK, Spain, Sweden). In an absolute monarchy the monarch holds real power (example: Saudi Arabia). A federation shares power between national and regional governments (examples: US, Germany, Switzerland).
+gov|stable|Separation of powers: the legislative branch makes laws, the executive branch carries them out and the judicial branch interprets them.
+gov|stable|European Parliament: directly elected, 720 members (MEPs) since 2024; it shares law-making with the Council of the EU. The Council of the EU is made up of national ministers and its presidency rotates every 6 months.
+gov|stable|European Council: heads of state or government that set the EU's overall direction. European Commission: one commissioner per member state, proposes laws and enforces treaties. The Court of Justice of the EU is in Luxembourg and the European Central Bank is in Frankfurt.
+gov|stable|EU symbols: Europe Day is 9 May (Schuman Declaration, 1950); the EU anthem is Ode to Joy; the motto is United in diversity.
+
+econ|stable|GDP (gross domestic product) is the total value of goods and services a country produces in a year.
+econ|stable|Inflation is a general rise in prices. Central banks usually target about 2% inflation a year.
+econ|stable|Central banks raise interest rates to fight inflation and cut them to support growth.
+econ|stable|Supply and demand: when demand rises and supply stays the same, prices tend to rise.
+econ|stable|A recession is commonly defined as two consecutive quarters of falling real GDP.
+econ|2025-10|The largest economies by nominal GDP (IMF estimates, mid-2020s): 1. United States (about 30 trillion US dollars), 2. China (about 19 trillion), 3. Germany; Japan and India are close behind and may swap places between IMF editions.|IMF
+econ|2026-05|The Chair of the US Federal Reserve is Kevin Warsh, sworn in on 22 May 2026. He succeeded Jerome Powell, who stays on as a Fed governor.|CNBC
+econ|2025-12|The US Federal Reserve cut interest rates three times in 2025 (September, October and 10 December), bringing its target range to 3.50 to 3.75%.|Federal Reserve
+econ|2026-06|The European Central Bank (ECB) President is Christine Lagarde (term to 31 October 2027). Vice-President: Boris Vujčić (since 1 June 2026).|ECB
+econ|2026-10|Bank of England Governor: Andrew Bailey. Bank of Japan Governor: Kazuo Ueda.
+econ|2026-06|SpaceX held its IPO on 12 June 2026, raising a record 75 billion US dollars at a valuation of 1.77 trillion dollars.|Britannica
+
+tech|stable|Charles Babbage designed the Analytical Engine in the 1830s. Ada Lovelace wrote what is considered the first computer program.
+tech|stable|Alan Turing described the Turing machine in 1936 and helped break the Enigma code in World War II.
+tech|stable|ENIAC (1945) was one of the first general-purpose electronic computers.
+tech|stable|The transistor was invented at Bell Labs in 1947. The integrated circuit followed in 1958 to 1959.
+tech|stable|ARPANET (1969) was the forerunner of the internet. TCP/IP became its standard on 1 January 1983.
+tech|stable|Tim Berners-Lee invented the World Wide Web at CERN (1989 to 1991).
+tech|stable|Google was founded in 1998, Wikipedia in 2001, Facebook in 2004, YouTube in 2005. The iPhone launched in 2007. ChatGPT launched on 30 November 2022.
+tech|stable|HTML structures web pages, CSS styles them and JavaScript makes them interactive.
+tech|2026-09|Apple's CEO is John Ternus since 1 September 2026. He replaced Tim Cook, who became executive chairman. Ternus is Apple's 8th CEO.|CNBC
+tech|2026-04|Other 2026 CEO changes: Greg Abel replaced Warren Buffett at Berkshire Hathaway, Josh D'Amaro replaced Bob Iger at Disney, and John Furner replaced Doug McMillon at Walmart.|Fortune
+tech|2026-10|Tech company CEOs: Microsoft Satya Nadella; Alphabet (Google) Sundar Pichai; Amazon Andy Jassy; Meta Mark Zuckerberg; Nvidia Jensen Huang; Tesla and SpaceX Elon Musk; OpenAI Sam Altman; Anthropic Dario Amodei; Google DeepMind Demis Hassabis.
+tech|stable|Large language models (LLMs) such as OpenAI's GPT series, Google's Gemini, Anthropic's Claude, Meta's Llama, Alibaba's Qwen and DeepSeek predict text and are trained on huge amounts of data. They can sound confident while being wrong (hallucination). Newest model names change every few months.
+
+health|stable|Normal resting adult vital signs: heart rate 60 to 100 beats per minute, breathing 12 to 20 breaths per minute, body temperature about 37 °C, blood pressure around 120/80 mmHg.
+health|stable|Carbohydrates and protein provide about 4 kcal per gram, fat provides about 9 kcal per gram.
+health|stable|WHO recommends at least 60 minutes a day of moderate to vigorous physical activity for children and teenagers aged 5 to 17. Teenagers need about 8 to 10 hours of sleep.
+health|stable|Vaccines train the immune system to recognise a germ. Edward Jenner developed the smallpox vaccine in 1796. Smallpox was declared eradicated in 1980.|WHO
+health|stable|Antibiotics kill bacteria but do not work against viruses such as colds and flu. Alexander Fleming discovered penicillin in 1928.
+health|stable|Common causes of death and disease: cardiovascular disease (the world's leading cause of death), cancer, diabetes, respiratory infections, malaria, tuberculosis and HIV/AIDS.
+health|stable|In Europe the emergency number is 112 (free, works in every EU country).
+health|stable|Adult CPR: 30 chest compressions (5 to 6 cm deep, 100 to 120 per minute) followed by 2 rescue breaths, or compressions only if untrained. Use an AED if one is available. Call 112 first.|ERC
+health|stable|First aid: place an unconscious person who is breathing normally in the recovery position (on their side). For bleeding apply firm direct pressure. Cool a burn under cool running water for about 20 minutes.
+health|stable|Anxiety and depression are common and treatable. Talking to a trusted adult, a school counsellor or a doctor helps. In immediate danger call 112.
+health|2026-05|On 17 May 2026 WHO declared a public health emergency over an Ebola outbreak in the Democratic Republic of the Congo and Uganda.|Britannica
+
+culture|stable|Major authors and works: Homer (Iliad, Odyssey); Dante (Divine Comedy); Shakespeare (Hamlet, Macbeth); Cervantes (Don Quixote); Goethe (Faust); Jane Austen (Pride and Prejudice); Tolstoy (War and Peace); Dostoevsky (Crime and Punishment).
+culture|stable|Major authors and works, continued: Victor Hugo (Les Misérables); Kafka (The Metamorphosis); George Orwell (1984); Gabriel García Márquez (One Hundred Years of Solitude); Chinua Achebe (Things Fall Apart).
+culture|stable|Art movements in order: Renaissance (Leonardo da Vinci, Michelangelo, Raphael), Baroque (Caravaggio, Rembrandt), Romanticism, Impressionism (Monet, Renoir), Post-Impressionism (Van Gogh, Cézanne), Cubism (Picasso, Braque), Surrealism (Dalí, Magritte), Abstract Expressionism (Pollock), Pop Art (Warhol).
+culture|stable|Classical music: Bach and Vivaldi (Baroque); Mozart and Haydn (Classical); Beethoven (bridge to Romantic); Chopin, Tchaikovsky and Wagner (Romantic); Stravinsky and Debussy (20th century).
+culture|stable|Popular music milestones: blues and jazz (early 1900s), rock and roll (1950s, Elvis Presley), the Beatles (1960s), hip-hop (1970s, New York).
+culture|2026-02|In February 2026 Kendrick Lamar became the hip-hop artist with the most Grammy Awards (27).|Britannica
+culture|2026-03|The 98th Academy Awards (Oscars) on 15 March 2026: Best Picture went to One Battle After Another (6 Oscars in total). Best Director: Paul Thomas Anderson. Host: Conan O'Brien.|oscars.org
+culture|2026-03|Oscars 2026 acting winners: Best Actor Michael B. Jordan (Sinners), Best Actress Jessie Buckley (Hamnet), Best Supporting Actress Amy Madigan (Weapons), Best Supporting Actor Sean Penn. Sinners received a record 16 nominations.|oscars.org
+culture|2026-03|At the 2026 Oscars, KPop Demon Hunters won Best Animated Feature and Best Original Song ("Golden"). Autumn Durald Arkapaw (Sinners) became the first woman to win Best Cinematography. Best Casting was awarded for the first time.|oscars.org
+culture|2026-09|At the Emmy Awards on 14 September 2026, Widow's Bay won 14 awards including best comedy, and The Pitt won best drama.|Britannica
+culture|2026-07|Major 2026 films: Michael (released 24 April 2026) and Christopher Nolan's The Odyssey (released 17 July 2026).|Britannica
+culture|stable|World religions by number of followers (approximate): Christianity about 2.3 to 2.4 billion, Islam about 2 billion, Hinduism about 1.2 billion, Buddhism about 500 million, Judaism about 15 million. Many people are non-religious.
+culture|stable|English has the most total speakers (about 1.5 billion). Mandarin Chinese has the most native speakers. Next come Hindi, Spanish, French, Arabic, Bengali, Portuguese and Russian.
+culture|stable|The UN has six official languages: Arabic, Chinese, English, French, Russian and Spanish. The EU has 24 official languages, including Slovene.
+culture|2026-03|Sarah Mullally became the first female Archbishop of Canterbury (installed 25 March 2026).|Britannica
+
+sports|2026-07|The 2026 FIFA World Cup (Canada, Mexico, USA; 11 June to 19 July 2026; the first with 48 teams) was won by Spain, who beat Argentina 1-0 after extra time at MetLife Stadium on 19 July 2026 (Ferran Torres scored in the 106th minute). It was Spain's second title. England finished third.|NPR
+sports|2026-02|At the Milan-Cortina Winter Olympics (6 to 22 February 2026) Norway topped the medal table with 18 gold and 41 total medals, both records. The USA was second with 12 golds. Johannes Høsflot Klæbo won 6 golds, a single-Games record.|NBC Olympics
+sports|2026-03|At the Milan-Cortina Winter Paralympics (6 to 15 March 2026) China topped the table with 15 gold and 44 total medals.|NBC
+sports|2026-05|The 2025-26 UEFA Champions League was won by Paris Saint-Germain, who beat Arsenal 1-1 (4-3 on penalties) on 30 May 2026 in Budapest. It was PSG's second title in a row.|Olympics.com
+sports|2026-05|2026 UEFA Europa League winners: Aston Villa. 2026 UEFA Women's Champions League winners: Barcelona (4-0 over Lyon).|Wikipedia
+sports|2026-07|Wimbledon 2026 champions: men's singles Jannik Sinner (Italy), women's singles Linda Nosková (Czech Republic).|Wikipedia
+sports|2026-09|US Open 2026 tennis champions: men's singles Alexander Zverev (Germany), women's singles Elena Rybakina (Kazakhstan).|Britannica
+sports|2026-07|Tour de France 2026 was won by Tadej Pogačar of Slovenia, his 5th title (a record-tying total shared with Anquetil, Merckx, Hinault and Induráin). Remco Evenepoel was 2nd and Isaac del Toro 3rd.|NPR
+sports|2025-12|Lando Norris (McLaren, UK) won the 2025 Formula 1 World Championship by 2 points over Max Verstappen at the Abu Dhabi finale on 7 December 2025. The 2026 F1 season uses new regulations.|Formula1.com
+sports|2026-06|The 2026 NBA champions are the New York Knicks (4-1 over the San Antonio Spurs). Finals MVP: Jalen Brunson.|Britannica
+sports|2026-02|Super Bowl LX (8 February 2026): Seattle Seahawks 29, New England Patriots 13.|Britannica
+sports|2026-06|The 2026 Stanley Cup was won by the Carolina Hurricanes over the Vegas Golden Knights.|Britannica
+sports|2026-07|Cricket: India won the men's T20 World Cup (8 March 2026); Australia won the women's T20 World Cup (5 July 2026).|Britannica
+sports|2026-07|Golf majors 2026: Masters Rory McIlroy; PGA Championship Aaron Rai; US Open Wyndham Clark; The Open Ryan Fox.|Wikipedia
+sports|2026-05|Other 2026 results: Indianapolis 500 winner Felix Rosenqvist; Kentucky Derby winner Golden Tempo; Paris-Roubaix winner Wout van Aert; Ski Flying World Championships winner Domen Prevc (Slovenia).|Wikipedia
+sports|stable|Football (soccer) is played with 11 players a side in two 45-minute halves. Basketball has 5 players a side and 4 quarters (12 minutes each in the NBA, 10 in FIBA).
+sports|stable|Tennis scoring: 0, 15, 30, 40, game. A set is won at 6 games with a 2-game lead, or by a tie-break.
+sports|stable|The Summer Olympics are held every 4 years: Paris 2024, then Los Angeles 2028. The next Winter Olympics are in the French Alps in 2030.
+
+people|stable|Isaac Newton (1643 to 1727) discovered the laws of motion and universal gravitation.
+people|stable|Albert Einstein (1879 to 1955) developed the theories of relativity.
+people|stable|Marie Curie (1867 to 1934) researched radioactivity and was the first person to win Nobel Prizes in two sciences.
+people|stable|Charles Darwin (1809 to 1882) proposed the theory of evolution by natural selection.
+people|stable|Leonardo da Vinci (1452 to 1519) was a Renaissance artist and inventor who painted the Mona Lisa.
+people|stable|William Shakespeare (1564 to 1616) was an English playwright.
+people|stable|Mahatma Gandhi (1869 to 1948) led India's non-violent independence movement.
+people|stable|Nelson Mandela (1918 to 2013) was an anti-apartheid leader and South Africa's first Black president.
+people|stable|Martin Luther King Jr. (1929 to 1968) was a leader of the US civil rights movement.
+people|2026-05|Ted Turner, founder of CNN, died on 6 May 2026 aged 87.|Britannica
+
+events|2025-01|Donald Trump was inaugurated for a second term as US president on 20 January 2025.
+events|2025-05|Pope Leo XIV was elected pope on 8 May 2025, after Pope Francis died on 21 April 2025.
+events|2026-01|Zohran Mamdani was sworn in as mayor of New York City on 1 January 2026.|Britannica
+events|2026-01|On 3 January 2026 US forces captured Venezuelan President Nicolás Maduro and his wife Cilia Flores. Maduro was charged in New York.|Britannica
+events|2026-01|On 8 January 2026 Iran cracked down on nationwide protests. Reported death tolls range from 12,000 to 30,000.|Britannica
+events|2026-02|On 28 February 2026 the US and Israel attacked Iran and Iran's Supreme Leader Ali Khamenei was killed (the 2026 Iran war). A two-week ceasefire mediated by Pakistan began on 8 April 2026; a later truce collapsed on 8 July 2026 after Iranian attacks on shipping in the Strait of Hormuz.|Britannica
+events|2026-10|As of 8 to 10 October 2026 the Iran war is unresolved, with a US blockade in force. President Trump said there would be no new strikes before the 3 November 2026 midterms.|Al Jazeera
+events|2026-03|Slovenia's parliamentary election in March 2026 ended in a near tie.|Wikipedia
+events|2026-04|Hungary's election on 12 April 2026 was won by Péter Magyar's Tisza party with a two-thirds majority. Magyar became prime minister on 9 May 2026.|Euronews
+events|2026-04|On 20 April 2026 Apple named John Ternus as its next CEO, effective 1 September 2026.|CNBC
+events|2026-06|On 24 June 2026 earthquakes of magnitude 7.2 and 7.5 struck north-western Venezuela; about 1,430 people were confirmed dead.|Britannica
+events|2026-07|On 4 July 2026 the United States celebrated its 250th anniversary.
+events|2026-08|On 26 August 2026 a glacier collapse caused deadly flash floods in Nepal and Tibet, killing hundreds.|Britannica
+events|2026-10|2026 Nobel Prize in Physiology or Medicine (announced 5 October 2026): Karl Deisseroth, Peter Hegemann and Georg Nagel, for optogenetics (light-gated ion channels).|nobelprize.org
+events|2026-10|2026 Nobel Prize in Physics (announced 6 October 2026): Francis Halzen, for the IceCube Neutrino Observatory and the discovery of high-energy astrophysical neutrinos.|nobelprize.org
+events|2026-10|2026 Nobel Prize in Chemistry (announced 7 October 2026): Henri B. Kagan and Kenso Soai, for non-linear effects and autocatalysis in asymmetric synthesis.|nobelprize.org
+events|2026-10|2026 Nobel Prize in Literature (announced 8 October 2026): Anne Carson.|nobelprize.org
+events|2026-10|2026 Nobel Peace Prize: Navi Pillay (South Africa). The 2026 Nobel economics prize is announced on 12 October 2026.|nobelprize.org
+
+slovenia|stable|Slovenia is a parliamentary republic in Central Europe. It borders Italy, Austria, Hungary and Croatia and has a short Adriatic coastline of about 47 km.
+slovenia|stable|Slovenia has an area of about 20,271 km² and a population of about 2.1 million.|SURS
+slovenia|stable|The capital and largest city of Slovenia is Ljubljana (about 300,000 people), on the Ljubljanica River. Maribor is the second-largest city.
+slovenia|stable|The official language of Slovenia is Slovene. Italian and Hungarian are co-official in ethnically mixed areas.
+slovenia|stable|Slovenia's currency is the euro since 1 January 2007. Slovenia was the first former-communist country to adopt it.
+slovenia|stable|Slovenia's highest peak is Triglav (2,864 m), which appears on the national coat of arms and lies in Triglav National Park.
+slovenia|stable|Well-known natural sites in Slovenia: Lake Bled, Lake Bohinj, Postojna Cave, the Škocjan Caves (UNESCO World Heritage Site) and the Soča River. The Lipizzaner horse breed is named after Lipica, Slovenia.
+slovenia|stable|Slovenia was part of the Habsburg lands, then of the Kingdom of Serbs, Croats and Slovenes and Yugoslavia from 1918. Slovenia declared independence on 25 June 1991 (Statehood Day), followed by the Ten-Day War.
+slovenia|stable|Slovenia joined NATO on 29 March 2004 and the EU on 1 May 2004. It joined the Schengen Area in December 2007 and held the EU Council presidency in 2008 and 2021.
+slovenia|stable|Slovenia's parliament has the National Assembly (90 deputies) and the National Council (40 members). A prime minister needs 46 votes in the first round to be elected.
+slovenia|2027-01|The President of Slovenia is Nataša Pirc Musar (since 23 December 2022). The next presidential election is due in 2027.|Wikipedia
+slovenia|2026-06|The Prime Minister of Slovenia is Janez Janša (SDS). He was elected by the National Assembly on 22 May 2026 and his government took office on 4 June 2026. It is his fourth term (also 2004 to 2008, 2012 to 2013 and 2020 to 2022).|Al Jazeera
+slovenia|2026-06|Slovenia's governing coalition is SDS, New Slovenia (NSi), the Democrats, the Slovenian People's Party (SLS) and Focus. Deputy prime ministers: Jernej Vrtovec (NSi) and Anže Logar (Democrats). Foreign minister: Tone Kajzer.|Wikipedia
+slovenia|2026-06|The previous Prime Minister of Slovenia was Robert Golob (Freedom Movement), from 1 June 2022 to 4 June 2026.|Wikipedia
+slovenia|stable|France Prešeren is Slovenia's national poet. The 7th stanza of his poem Zdravljica is the national anthem. 8 February (Prešeren Day) is Slovenian Culture Day.
+slovenia|stable|Ivan Cankar was a famous Slovenian writer. Jože Plečnik was the architect who shaped much of Ljubljana; his Ljubljana works are a UNESCO World Heritage Site.
+slovenia|2026-10|Notable Slovenians: Tadej Pogačar and Primož Roglič (cyclists), Luka Dončić (basketball), Janja Garnbret (sport climbing, Olympic champion), Domen Prevc (ski jumping), Slavoj Žižek (philosopher), Herman Potočnik Noordung (space-station pioneer).
+slovenia|stable|Ljubljana facts: the dragon is the city symbol (Dragon Bridge). Other landmarks are Ljubljana Castle and the Triple Bridge. Ljubljana was European Green Capital in 2016.
+slovenia|stable|The European Schools are an intergovernmental school system created in 1953 for children of EU staff. Students study in language sections and finish with the European Baccalaureate.
+
+daily|stable|Slovenia uses Central European Time (CET, UTC+1) in winter and Central European Summer Time (CEST, UTC+2) in summer. Clocks change on the last Sunday of March and the last Sunday of October; in 2026 the change back is on 25 October.
+daily|stable|UTC (Coordinated Universal Time) is the world time standard. The UK uses GMT/BST, New York is UTC-5 or UTC-4 (summer) and Tokyo is UTC+9.
+daily|stable|The Gregorian calendar was introduced in 1582. A year has 365 days, or 366 in a leap year.
+daily|stable|Leap year rule: a year is a leap year if it is divisible by 4, except century years, which must be divisible by 400. So 2000 was a leap year, 1900 was not and 2028 will be.
+daily|stable|Length conversions: 1 inch = 2.54 cm; 1 foot = 30.48 cm; 1 mile = 1.609 km; 1 km = 0.621 miles.
+daily|stable|Mass and volume conversions: 1 kg = 2.205 pounds; 1 pound = 453.6 g; 1 litre = 1,000 cm³; 1 US gallon = 3.785 litres.
+daily|stable|Temperature conversion: °F = °C × 9/5 + 32; °C = (°F - 32) × 5/9.
+daily|stable|Common abbreviations: EU (European Union), UN (United Nations), NATO, WHO (World Health Organization), GDP (gross domestic product), CEO (chief executive officer), AI (artificial intelligence), CPU (central processing unit), URL (web address), DNA (deoxyribonucleic acid), e.g. (for example), i.e. (that is), BCE/CE (before the Common Era / Common Era).
+daily|stable|How electricity works: an electric current is the flow of electrons pushed by a voltage. European mains power is 230 volts at 50 hertz.
+daily|stable|A four-stroke petrol engine repeats intake, compression, power (combustion) and exhaust. Electric cars use batteries and electric motors instead.
+daily|stable|How the internet works: data is split into packets that are routed between computers using IP addresses and TCP. DNS translates names such as example.com into IP addresses.
+daily|stable|Study skills that work according to research: test yourself instead of rereading (retrieval practice), review over days and weeks (spaced repetition), mix problem types (interleaving), explain ideas in your own words and sleep well before exams.
