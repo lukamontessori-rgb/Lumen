@@ -841,6 +841,16 @@ hr.thin { border: 0; border-top: 1px solid var(--line); margin: 2px 0; width: 10
   dialog.sheet.settings .sheet-head .icon-btn { width: 40px; height: 40px; }
   dialog.sheet.settings .sheet-head h2 { padding-left: 6px; }
 }
+
+/* ---- good / wrong answer buttons and the "what went wrong" form ---- */
+.msg-foot .icon-btn.rate.on { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.msg-foot .icon-btn.rate.on svg { fill: color-mix(in srgb, var(--accent) 22%, transparent); }
+.teach-why { display: grid; gap: 2px; margin: 4px 0 12px; }
+.teach-why .check { padding: 7px 4px; }
+.teach-fix { display: block; margin: 0 0 6px; font-size: 14px; }
+.teach-fix span { color: var(--muted); font-size: 12.5px; margin-left: 4px; }
+#teach textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px; background: var(--bg); font-size: 14px; outline: none; min-height: 72px; resize: vertical; margin-bottom: 12px; }
+#teach textarea:focus { border-color: var(--accent); }
 </style>
 </head>
 <body>
@@ -942,6 +952,19 @@ hr.thin { border: 0; border-top: 1px solid var(--line); margin: 2px 0; width: 10
       <input id="askInput" type="text" autocomplete="off" hidden>
       <label class="check" id="askCheckWrap" hidden><input type="checkbox" id="askCheck"><span id="askCheckText"></span></label>
       <div class="row-end"><button class="btn" id="askCancel" type="button">Cancel</button><button class="btn primary" id="askOk" type="submit">OK</button></div>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="sheet small" id="teach" aria-labelledby="teachTitle">
+  <form method="dialog" id="teachForm">
+    <div class="sheet-head"><h2 id="teachTitle">What went wrong?</h2></div>
+    <div class="sheet-body">
+      <p class="hint">Your answer stays on this computer. Lumen uses it the next time you ask about this.</p>
+      <div class="teach-why" id="teachWhy" role="radiogroup" aria-label="What went wrong"></div>
+      <label class="teach-fix" for="teachFix"><b>What is the right answer?</b> <span>Optional</span></label>
+      <textarea id="teachFix" rows="3" maxlength="300" placeholder="Example: The Eiffel Tower was finished in 1889."></textarea>
+      <div class="row-end"><button class="btn" id="teachCancel" type="button">Cancel</button><button class="btn primary" id="teachSave" type="submit">Save</button></div>
     </div>
   </form>
 </dialog>
@@ -1137,6 +1160,8 @@ const ICONS = {
   search: '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/>',
   panel: '<rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M9.5 4.5v15"/>',
   sliders: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+  thumbup: '<path d="M4.5 11h3v9.5h-3z"/><path d="M7.5 11l3-6.1a1.7 1.7 0 0 1 3.2 1V10h4.4a2 2 0 0 1 2 2.4l-1.2 6.2a2.5 2.5 0 0 1-2.4 1.9H7.5"/>',
+  thumbdown: '<g transform="translate(0 24) scale(1 -1)"><path d="M4.5 11h3v9.5h-3z"/><path d="M7.5 11l3-6.1a1.7 1.7 0 0 1 3.2 1V10h4.4a2 2 0 0 1 2 2.4l-1.2 6.2a2.5 2.5 0 0 1-2.4 1.9H7.5"/></g>',
   copy: '<rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
   refresh: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v5h-5"/>',
@@ -1238,7 +1263,7 @@ function downloadFile(name, text, type = 'text/markdown') {
 /* ---------- settings ---------- */
 const DEFAULTS = {
   ver: 4, model: 'Qwen3.5-2B', mode: 'auto', style: 'normal', wiki: 'auto', about: '', name: '', rules: '', city: '',
-  creativity: 'balanced', theme: 'system', textSize: 'normal', sendKey: 'enter', breakNudge: false, autoStart: true, rail: true,
+  creativity: 'balanced', theme: 'system', textSize: 'normal', sendKey: 'enter', breakNudge: false, check: true, autoStart: true, rail: true,
   ctxSize: 'large', memory: [], sources: {}, reader: 'ask', webProvider: 'jina', webKey: '', speechRate: 1, speechVoice: '', showNotes: true,
 };
 const S = (() => {
@@ -1258,6 +1283,8 @@ if (!['ask', 'allow', 'never'].includes(S.reader)) S.reader = 'ask';
 if (!['small', 'normal', 'large'].includes(S.textSize)) S.textSize = 'normal';
 if (!['enter', 'mod'].includes(S.sendKey)) S.sendKey = 'enter';
 S.breakNudge = S.breakNudge === true;
+/* Source check (see 156-ground.js): look for dates, numbers and names that are in none of the sources, and write the answer again once without them. */
+S.check = S.check !== false;
 S.autoStart = S.autoStart !== false;
 if (!['jina', 'tavily'].includes(S.webProvider)) S.webProvider = 'jina';
 if (!Array.isArray(S.memory)) S.memory = [];
@@ -1509,7 +1536,8 @@ const Usage = (() => {
   const num = v => (Number.isFinite(v) && v > 0 ? Math.round(v) : 0);
   const pad = n => String(n).padStart(2, '0');
   const dayKey = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  const blank = () => ({ a: 0, i: 0, o: 0, g: 0, t: 0, l: 0, m: {}, md: {} });
+  const QK = ['s', 'c', 'x', 'b', 'u', 'd', 'k'];   // answers checked against sources, clean, fixed by Lumen, flagged and left, rated good, rated wrong, corrections taught
+  const blank = () => ({ a: 0, i: 0, o: 0, g: 0, t: 0, l: 0, m: {}, md: {}, q: Object.fromEntries(QK.map(k => [k, 0])) });
   let data = null, dirty = false, saveT = 0, lastAct = Date.now(), timer = null, lastTick = 0, sinceBreak = 0;
   const session = { start: Date.now(), a: 0, i: 0, o: 0, t: 0 };
 
@@ -1520,6 +1548,7 @@ const Usage = (() => {
       if (!/^\d{4}-\d\d-\d\d$/.test(k) || !d || typeof d !== 'object') continue;
       const r = blank();
       for (const f of ['a', 'i', 'o', 'g', 't', 'l']) r[f] = num(d[f]);
+      for (const f of QK) r.q[f] = num(d.q && d.q[f]);
       for (const [mk, mv] of Object.entries(d.m && typeof d.m === 'object' ? d.m : {})) if (/^[\w.\-]{1,40}$/.test(mk) && mv && (num(mv.i) || num(mv.o))) r.m[mk] = { i: num(mv.i), o: num(mv.o) };
       for (const [mk, mv] of Object.entries(d.md && typeof d.md === 'object' ? d.md : {})) if (/^[a-z]{2,12}$/.test(mk) && num(mv)) r.md[mk] = num(mv);
       out.days[k] = r;
@@ -1541,7 +1570,7 @@ const Usage = (() => {
     try { localStorage.setItem(KEY, JSON.stringify(data)); dirty = false; saveT = Date.now(); } catch {}
   }
   const maybeSave = () => { if (Date.now() - saveT > 20e3) save(); };
-  function today() { const d = load(); const k = dayKey(); return d.days[k] || (d.days[k] = blank()); }
+  function today() { const d = load(); const k = dayKey(), r = d.days[k] || (d.days[k] = blank()); if (!r.q) r.q = blank().q; return r; }
   const touch = () => { dirty = true; };
 
   /* One finished call to the AI model. `usage` is what the engine reported (may be missing; then it is estimated). */
@@ -1557,13 +1586,23 @@ const Usage = (() => {
     session.i += i; session.o += o;
     touch(); maybeSave();
   }
-  /* One answer that finished. */
-  function addAnswer(mode) {
+  /* One answer that finished. `ground` is the source check of that answer (see 156-ground.js), when it had one. */
+  function addAnswer(mode, ground) {
     if (erasing) return;
     const d = today(); d.a += 1; session.a += 1;
     const k = /^[a-z]{2,12}$/.test(mode || '') ? mode : 'auto';
     d.md[k] = (d.md[k] || 0) + 1;
+    if (ground && typeof ground === 'object') {
+      d.q.s += 1;
+      if (ground.bad?.length) d.q.b += 1; else if (ground.fixed?.length) d.q.x += 1; else d.q.c += 1;
+    }
     touch(); maybeSave();
+  }
+  /* A rating or a correction from the person: kind 'u' (good), 'd' (wrong) or 'k' (correction taught); by is +1, or -1 to take it back. */
+  function addRating(kind, by = 1) {
+    if (erasing || !QK.includes(kind)) return;
+    const d = today(); d.q[kind] = Math.max(0, d.q[kind] + (by < 0 ? -1 : 1));
+    touch(); save(true);
   }
   /* Time with Lumen open, visible and in use (a click, a key press or an answer being written within the last 90 seconds). */
   function tick(ms = TICK_MS, force) {
@@ -1588,7 +1627,7 @@ const Usage = (() => {
   }
 
   /* ----- reading it back ----- */
-  const sum = days => days.reduce((s, d) => { for (const f of ['a', 'i', 'o', 'g', 't', 'l']) s[f] += d[f] || 0; return s; }, blank());
+  const sum = days => days.reduce((s, d) => { for (const f of ['a', 'i', 'o', 'g', 't', 'l']) s[f] += d[f] || 0; for (const f of QK) s.q[f] += d.q?.[f] || 0; return s; }, blank());
   function range(n) {   // n = 1 (today), 7, 30, or 0 for all time
     const d = load(), now = new Date(), keys = [];
     if (!n) return Object.entries(d.days).map(([k, v]) => ({ k, ...v }));
@@ -1608,7 +1647,8 @@ const Usage = (() => {
     const d = load(), now = new Date(), out = [];
     for (let x = n - 1; x >= 0; x--) {
       const dt = new Date(now.getFullYear(), now.getMonth(), now.getDate() - x), k = dayKey(dt), r = d.days[k] || blank();
-      out.push({ k, date: dt, tokens: r.i + r.o, answers: r.a, minutes: Math.round(r.t / 6) / 10 });
+      const q = r.q || {};
+      out.push({ k, date: dt, tokens: r.i + r.o, answers: r.a, minutes: Math.round(r.t / 6) / 10, checked: q.s || 0, ok: (q.c || 0) + (q.x || 0), up: q.u || 0, down: q.d || 0 });
     }
     return out;
   }
@@ -1622,7 +1662,7 @@ const Usage = (() => {
   }
   function reset() { data = clean(null); dirty = true; session.a = session.i = session.o = session.t = 0; save(true); }
   const since = () => load().since;
-  return { start, addCall, addAnswer, tick, totals, series, streak, reset, since, session, save, dayKey, _data: () => load(), _setAct: t => { lastAct = t; } };
+  return { start, addCall, addAnswer, addRating, tick, totals, series, streak, reset, since, session, save, dayKey, _data: () => load(), _setAct: t => { lastAct = t; } };
 })();
 const fmtNum = n => (n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + 'M' : n >= 1e4 ? Math.round(n / 1e3) + 'K' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(Math.round(n))).replace('.0K', 'K').replace('.0M', 'M');
 const fmtDur = s => { s = Math.round(s); if (s < 60) return s + ' s'; const m = Math.round(s / 60); if (m < 60) return m + ' min'; const h = Math.floor(m / 60), r = m % 60; return r ? `${h} h ${r} min` : `${h} h`; };
@@ -4499,7 +4539,8 @@ function fillAssistant(node, m, chat) {
   r.widget.hidden = !m.widget;
   // Notices above the answer: what was searched, and honest warnings when nothing reliable was found
   const lastMsg = chat.messages[chat.messages.length - 1] === m;
-  const nk = [m.fixed ? m.fixed.to + '>' + m.fixed.from : '', m.alts ? m.alts.lead.title + (m.alts.picked ? '!' : '') + (lastMsg && !live ? '*' : '') : '', m.lookup || '', m.searchText || '', (m.failedSrc || []).join(','), m.mathCheck ? 'm' + m.mathCheck.checked + ':' + m.mathCheck.wrong.length : '', (m.repaired || []).join('+'), (m.solveMissing || []).join('+'), m.usedDocs ? m.usedDocs.files.length + ':' + Math.round(m.usedDocs.coverage * 100) + (m.usedDocs.whole ? 'w' : '') : '', m.playbook === 'debate' && !live ? 'debate' + (debateBalance(m.content)?.pct ?? '') : '', m.exCopy ? 'c' + m.exCopy : '', m.packCopy ? 'p' + m.packCopy : '', m.care ? 'care' : '', m.vote ? 'v' + m.vote.wins + '/' + m.vote.n + (m.vote.unsure ? 'u' : '') : ''].join('|');
+  const big = !live && lastMsg && !App.run ? Bigger.offer(m) : null;
+  const nk = [big ? 'big' + big.model.key + (big.cached ? 's' : '') : '', m.fixed ? m.fixed.to + '>' + m.fixed.from : '', m.alts ? m.alts.lead.title + (m.alts.picked ? '!' : '') + (lastMsg && !live ? '*' : '') : '', m.lookup || '', m.searchText || '', (m.failedSrc || []).join(','), m.mathCheck ? 'm' + m.mathCheck.checked + ':' + m.mathCheck.wrong.length : '', (m.repaired || []).join('+'), (m.solveMissing || []).join('+'), m.usedDocs ? m.usedDocs.files.length + ':' + Math.round(m.usedDocs.coverage * 100) + (m.usedDocs.whole ? 'w' : '') : '', m.playbook === 'debate' && !live ? 'debate' + (debateBalance(m.content)?.pct ?? '') : '', m.exCopy ? 'c' + m.exCopy : '', m.packCopy ? 'p' + m.packCopy : '', m.care ? 'care' : '', m.vote ? 'v' + m.vote.wins + '/' + m.vote.n + (m.vote.unsure ? 'u' : '') : '', m.ground ? 'g' + (m.ground.bad || []).join('/') + '>' + (m.ground.fixed || []).join('/') + (m.ground.tried ? 't' : '') : ''].join('|');
   if (r.nk !== nk) {
     r.nk = nk;
     r.notice.replaceChildren();
@@ -4520,6 +4561,8 @@ function fillAssistant(node, m, chat) {
       h('a', { href: 'https://duckduckgo.com/?q=' + encodeURIComponent(m.searchText || ''), target: '_blank', rel: 'noopener noreferrer', text: 'Search the web' }), '. If you know the answer, write “remember that …” and Lumen will keep it.'));
     if (m.mathCheck?.wrong?.length) r.notice.append(note('alert', true, h('b', { text: 'Check the arithmetic. ' }), 'The calculator got a different result for ' + m.mathCheck.wrong.slice(0, 3).map(w => `${w.expr} (the answer says ${w.said}, the calculator says ${w.real})`).join('; ') + '. The final answer may be wrong.'));
     else if (m.mathCheck?.checked) r.notice.append(note('check', false, `The calculator checked ${m.mathCheck.checked} calculation${m.mathCheck.checked > 1 ? 's' : ''} in the steps: all correct.`));
+    if (m.ground?.fixed?.length) r.notice.append(note('check', false, h('b', { text: 'Checked against the sources. ' }), `Lumen found ${m.ground.fixed.length} detail${m.ground.fixed.length > 1 ? 's' : ''} that no source contained (${m.ground.fixed.slice(0, 4).join(', ')}) and wrote the answer again without ${m.ground.fixed.length > 1 ? 'them' : 'it'}.`));
+    if (m.ground?.bad?.length) r.notice.append(note('alert', true, h('b', { text: 'Not found in the sources: ' }), m.ground.bad.slice(0, 5).join(', ') + `. ${m.ground.bad.length > 1 ? 'These' : 'This'} may be wrong. Check ${m.ground.bad.length > 1 ? 'them' : 'it'} yourself.` + (m.ground.tried ? ' Lumen tried once to fix this.' : '')));
     if (m.care) r.notice.append(note('info', false, h('b', { text: 'If you are thinking about hurting yourself, you are not alone. ' }), 'Please talk to someone you trust, or call now: ' + Care.lines.map(([a, b]) => b + ' (' + a.replace(/ \(.*$/, '') + ')').join(' · ') + '. These are free numbers in Slovenia.'));
     if (m.exCopy) r.notice.append(note('info', false, `This answer repeats ${m.exCopy} words in a row from one of your example answers. Press “Answer again” if it sounds odd.`));
     if (m.packCopy) r.notice.append(note('info', false, `${m.packCopy} words in a row are copied from the offline Wikipedia copy. Its text is shared under CC BY-SA 4.0: if you reuse it, say that it comes from Wikipedia. Press “Answer again” for a version in other words.`));
@@ -4531,6 +4574,7 @@ function fillAssistant(node, m, chat) {
     if (m.repaired?.length) r.notice.append(note('info', false, `The first solution had no ${m.repaired.join(' and ')} part, so Lumen asked the AI to write it again with all six parts.`));
     else if (m.solveMissing?.length && m.playbook === 'math') r.notice.append(note('info', true, `This solution is missing: ${m.solveMissing.join(', ')}. Ask “add the ${m.solveMissing[0].toLowerCase()} part” if you need it.`));
     if (m.playbook === 'debate' && m.content) { const bal = debateBalance(m.content); if (bal && !bal.fair) r.notice.append(note('info', true, h('b', { text: 'The two sides may not be fair. ' }), `The ${bal.longer === 1 ? 'first' : 'second'} case is about ${bal.pct}% longer than the other, so this answer may lean that way. Read both sides with care.`)); }
+    if (big) r.notice.append(note('spark', false, 'A bigger model usually makes fewer mistakes. ', h('button', { class: 'chip-btn alt', type: 'button', text: `Answer again with ${big.model.name}`, title: big.cached ? 'Saved on this computer' : `One-time download of ${fmtMB(big.model.downloadMB)}`, onclick: () => Bigger.use(chat, m, big) })));
     if (m.failedSrc?.length) r.notice.append(note('alert', true, h('b', { text: 'Some sources did not answer: ' }), m.failedSrc.map(id => FAIL_NAME[id] || id).join(', ') + '. The answer may be missing that information.'));
   }
   // Sources, written like footnotes
@@ -4550,6 +4594,12 @@ function fillAssistant(node, m, chat) {
     if (fn) r.foot.append(fn);
     if (m.content) r.foot.append(iconButton('copy', 'Copy answer', ev => copyText(labelCopy(m.content || ''), ev.currentTarget)));
     if (m.content && !m.widget) r.foot.append(iconButton(Speech.id === m.id ? 'stop' : 'speaker', Speech.id === m.id ? 'Stop reading' : 'Read aloud', ev => Speech.toggle(m, ev.currentTarget)));
+    if (m.content && !m.widget && m.state === 'done') {
+      const up = iconButton('thumbup', 'Good answer', () => Teach.good(chat, m), 'icon-btn rate' + (m.rating === 'up' ? ' on' : '')), dn = iconButton('thumbdown', 'Wrong answer', () => Teach.wrong(chat, m), 'icon-btn rate' + (m.rating === 'down' ? ' on' : ''));
+      up.setAttribute('aria-pressed', String(m.rating === 'up')); dn.setAttribute('aria-pressed', String(m.rating === 'down'));
+      if (m.rating === 'down' && m.ratingWhy) dn.title = 'Marked wrong: ' + (Teach.WHY_LABEL[m.ratingWhy] || '').toLowerCase() + '. Press to take it back';
+      r.foot.append(up, dn);
+    }
     if (isLast && m.state !== 'error') r.foot.append(iconButton('refresh', 'Answer again', () => regenerate(chat, m)));
     if (m.content || m.state === 'error') {
       const more = iconButton('more', 'More', () => showMessageMenu(more, chat, m));
@@ -4690,7 +4740,9 @@ function buildMessages({ chat, userMsg, notes, exact, docs, budget, histTokens, 
     ctxText = contextBlocks({ notes: nb, exact, docs: db });
   }
   if (question.length > room()) { question = question.slice(0, Math.max(400, room())).replace(/\s+\S*$/, '') + '\n\n[The rest of this message was cut because it is too long.]'; truncated = true; }
-  const content = ctxText ? ctxText + `My question: ${question}` : question;
+  // the last thing the model reads is the rule that matters most for facts (small models follow what they read last)
+  const fromWhat = [nb?.block && 'notes', db?.block && 'documents'].filter(Boolean).join(' and ');
+  const content = ctxText ? ctxText + `My question: ${question}` + (fromWhat ? `\n\n(Take every date, number and name from the ${fromWhat}. If a detail is not there, leave it out or say you are not sure.)` : '') : question;
 
   const prior = all.slice(sumAt >= 0 && sumAt < idx ? sumAt + 1 : 0, idx).filter(m => m.role === 'user' || (m.role === 'assistant' && m.content && m.state !== 'error'));
   // example answers go first, as earlier turns; the least similar ones give way when the prompt is tight
@@ -4719,8 +4771,9 @@ function buildMessages({ chat, userMsg, notes, exact, docs, budget, histTokens, 
   if (fixed.length && fixed[fixed.length - 1].role === 'user') fixed.pop();
   return { messages: [{ role: 'system', content: sys }, ...Examples.turns(exs), ...fixed, { role: 'user', content }], dropped, used, truncated, examples: exs.map(e => e.id) };
 }
-function samplingFor(think) {
-  const c = CREATIVITY[S.creativity] || CREATIVITY.balanced;
+/* When the answer rests on notes or files, "balanced" becomes "precise": less randomness means fewer made-up details. A person who chose Creative keeps it. */
+function samplingFor(think, grounded = false) {
+  const c = CREATIVITY[grounded && (S.creativity || 'balanced') === 'balanced' ? 'precise' : S.creativity] || CREATIVITY.balanced;
   return { ...(think ? c.think : c.fast), presence_penalty: 1.5 };
 }
 
@@ -4897,6 +4950,34 @@ async function voteExtra({ am, run, messages, maxTokens }) {
 }
 const voteSpeak = key => (key || '').replace(/^[nbct]:/, '');
 
+/* ---------- a bigger model makes fewer mistakes: offered under a weak answer ----------
+   Shown only when the answer is rated Low, has details that no source contains, or was marked wrong, and only when the computer has enough memory. */
+const Bigger = (() => {
+  const ORDER = ['Qwen3.5-0.8B', 'Qwen3.5-2B', 'Qwen3.5-4B'];
+  function offer(m) {
+    if (!m || !m.content || m.widget || m.state !== 'done' || Brain.state === 'unsupported') return null;
+    const curKey = (MODELS.find(x => x.name === m.modelName) || { key: S.model }).key;
+    const i = ORDER.indexOf(curKey);
+    if (i < 0 || i >= ORDER.length - 1) return null;
+    const weak = confidenceOf(m)?.level === 'Low' || !!m.ground?.bad?.length || m.rating === 'down';
+    if (!weak) return null;
+    const model = MODELS.find(x => x.key === ORDER[i + 1]);
+    if (!model || S.model === model.key) return null;
+    if ((navigator.deviceMemory || 8) * 1000 < model.vramMB * 1.6) return null;   // the computer says it has too little memory for it
+    return { model, cached: !!Brain.cached[model.key] };
+  }
+  async function use(chat, m, big) {
+    if (App.run) { toast('Wait for the answer to finish first.'); return; }
+    if (!big.cached) {
+      const r = await askDialog({ title: `Use ${big.model.name}?`, text: `It needs a one-time download of ${fmtMB(big.model.downloadMB)} and about ${fmtMB(big.model.vramMB)} of graphics memory. It is slower, but it makes fewer mistakes. Close other tabs and apps first. Your chats stay on this computer.`, ok: 'Download and use it' });
+      if (!r.ok) return;
+    }
+    S.model = big.model.key; saveSettings(); renderModelChip(); renderBrainCard(); updateMeter();
+    regenerate(chat, m);   // the new model is loaded first, then the question is answered again
+  }
+  return { offer, use };
+})();
+
 /* ---------- confidence label: High, Medium or Low, decided by evidence (sources, exact results), never by the model's own feeling ---------- */
 const STRONG_SITES = /^(Wikipedia|Wikidata|Wiktionary|Wikivoyage|Simple English Wikipedia|Lumen|Open-Meteo|Frankfurter|CoinGecko|OpenAlex)\b/i;
 /* How many specific details (years, numbers with units, full names) does the answer state? */
@@ -4913,14 +4994,26 @@ function confidenceOf(m) {
   if (m.vote?.unsure) return { level: 'Low', reason: `${m.vote.n} tries gave answers that did not agree (${m.vote.answers.join('; ')}).` };
   const vr = m.vote ? ` Voting: ${m.vote.wins} of ${m.vote.n} tries gave the same answer. That makes it more likely, not certain.` : '';
   const r0 = baseConfidence(m) || (m.vote ? { level: 'Medium', reason: 'No source was used.' } : null);
-  const r = r0 && m.vote ? { ...r0, reason: r0.reason + vr } : r0 || (m.factCheck?.items?.length ? { level: 'Medium', reason: 'No source was used for this answer.' } : null);
+  let r = r0 && m.vote ? { ...r0, reason: r0.reason + vr } : r0 || (m.factCheck?.items?.length ? { level: 'Medium', reason: 'No source was used for this answer.' } : null);
   const fc = m.factCheck?.items;
-  if (!r || !fc?.length) return r;
+  if (!r || !fc?.length) return applyGround(m, r);
   const n = k => fc.filter(i => i.verdict === k).length;
+  r = applyGround(m, r);
   if (n('contradicted')) return { level: 'Low', reason: `The fact check found ${n('contradicted')} claim${n('contradicted') > 1 ? 's' : ''} contradicted by a source. Open “Fact check” to see which.` };
   const note = ` Fact check: ${n('supported')} of ${fc.length} claims supported${n('unconfirmed') ? ', ' + n('unconfirmed') + ' could not be confirmed' : ''}.`;
   if (n('unconfirmed') * 2 > fc.length && r.level === 'High') return { level: 'Medium', reason: r.reason + note };
   return { ...r, reason: r.reason + note };
+}
+/* The source check (156-ground.js): details that no source contains lower the label; a clean check is said plainly. */
+function applyGround(m, r) {
+  const g = m.ground;
+  if (!r || !g) return r;
+  if (g.bad?.length) {
+    const k = g.bad.length, level = k >= 3 ? 'Low' : r.level === 'High' ? 'Medium' : r.level;
+    return { level, reason: `${k} detail${k > 1 ? 's' : ''} in the answer ${k > 1 ? 'were' : 'was'} not found in any source (${g.bad.slice(0, 4).join(', ')}). ${g.fixed?.length ? 'Lumen already took out ' + g.fixed.length + ' other' + (g.fixed.length > 1 ? 's' : '') + '. ' : ''}Check ${k > 1 ? 'them' : 'it'} yourself.` };
+  }
+  if (g.n > 0 && !/checked the dates/.test(r.reason)) return { ...r, reason: r.reason + ` Lumen checked the dates, numbers and names in the answer against the sources (${g.n} checked${g.fixed?.length ? ', after it took out ' + g.fixed.length + ' it could not find' : ', all found'}). It did not check the meaning of each sentence.` };
+  return r;
 }
 function baseConfidence(m) {
   const src = (m.sources || []).filter(Boolean);
@@ -4933,7 +5026,7 @@ function baseConfidence(m) {
   if (strong.length) {
     const old = strong.every(s => /saved/i.test(s.site || ''));
     return old ? { level: 'Medium', reason: 'Based on older saved notes. They may be out of date.' }
-      : { level: 'High', reason: `${strong.length} source${strong.length > 1 ? 's' : ''} found (${names.join(', ')}). The AI had them in front of it. Lumen did not check each sentence against them.${strong.some(s => /offline copy/i.test(s.site || '')) ? ' The Wikipedia text is from an offline copy, so very recent changes may be missing.' : ''}` };
+      : { level: 'High', reason: `${strong.length} source${strong.length > 1 ? 's' : ''} found (${names.join(', ')}). The AI had them in front of it.${m.ground ? '' : ' Lumen did not check each sentence against them.'}${strong.some(s => /offline copy/i.test(s.site || '')) ? ' The Wikipedia text is from an offline copy, so very recent changes may be missing.' : ''}` };
   }
   if (src.length) return { level: 'Medium', reason: src.every(s => s.headline) ? 'Only news headlines were found, not full articles.' : 'Only web pages or news were found, no encyclopedia source.' };
   const specifics = specificCount(m.content);
@@ -5041,6 +5134,109 @@ function showFactCheck(chat, m, { rerun = false } = {}) {
     toast('The fact check did not work: ' + friendlyError(e));
   });
 }
+
+/* ---------- source check: are the dates, numbers and names in an answer found in the sources? ----------
+   Plain code, no AI, instant. A small model sometimes writes a year, a figure or a person's name that is in none of its notes.
+   Lumen finds those details, asks the model once to write the answer again without them, and tells you what is left.
+   It looks only at what is in front of the model for this question: the notes, your attached files, exact results, your own messages. */
+const Ground = (() => {
+  const fold = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const wordsOf = s => fold(s).match(/[\p{L}\p{N}]+/gu) || [];
+  const SCALE = { thousand: 1e3, million: 1e6, billion: 1e9, bn: 1e9, trillion: 1e12 };
+  const HEDGE = /\b(about|around|approximately|roughly|nearly|almost|over|under|more than|less than|up to|circa|c\.|estimated|some)\s*$/i;
+  const MONTHS = new Set('january february march april may june july august september october november december monday tuesday wednesday thursday friday saturday sunday'.split(' '));
+  const LEAD = new Set(('the a an in on at by for from with without after before during while when where who whom what why how this that these those it he she they we you i his her its their our my your as but and or so if then however also today yesterday tomorrow ' +
+    'many some most other another each every all both several one two three new old first second third last next early late modern ancient more much such there here now still even only just since until although though because according despite between among over under ' +
+    'about around through throughout within into upon like unlike overall finally meanwhile later earlier together example instance note remember step steps answer summary conclusion key main important quick short simple let lets of to is are was were be been').split(' '));
+
+  /* Take away the parts of an answer that are not claims about the world: code, formulas, links, citation numbers and the markdown signs. */
+  const prep = t => String(t || '')
+    .replace(/```[\s\S]*?```/g, ' ').replace(/`[^`\n]*`/g, ' ')
+    .replace(/\$\$[\s\S]*?\$\$/g, ' ').replace(/\$[^$\n]*[\\^_{}][^$\n]*\$/g, ' ')
+    .replace(/https?:\/\/\S+/g, ' ').replace(/\[\d{1,2}\]/g, ' ')
+    .replace(/^\s{0,3}#{1,6}\s.*$/gm, ' ')
+    .replace(/^\s*(?:[-*•]|\d{1,2}[.)])\s+/gm, '')
+    .replace(/[*_~>|]/g, ' ');
+
+  const NUM_RE = /(?<![\p{L}\p{N}.,])[$€£]?(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?(?:\s?(thousand|million|billion|trillion|bn)(?![\p{L}])|\s?(%|percent|per cent))?/giu;
+  /* Every number in a text: { v: value, year, scale, pct, hedged, decade, at } */
+  function numbersOf(text) {
+    const out = [];
+    for (const m of text.matchAll(NUM_RE)) {
+      const intPart = m[1].replace(/,/g, ''), frac = m[2] || '', scale = m[3] ? SCALE[m[3].toLowerCase()] : 0, pct = !!m[4];
+      let v = parseFloat(intPart + frac);
+      if (!isFinite(v)) continue;
+      if (scale) v *= scale;
+      const year = !scale && !pct && !frac && !m[1].includes(',') && intPart.length === 4 && v >= 1000 && v <= 2199;
+      const end = m.index + m[0].length;
+      const decade = year && v % 10 === 0 && text[end] === 's';
+      const before = text.slice(Math.max(0, m.index - 22), m.index);
+      out.push({ v, year, scale: !!scale, pct, frac: !!frac, decade, hedged: !!scale || HEDGE.test(before), text: m[0].trim(), at: m.index });
+    }
+    return out;
+  }
+  /* Only some numbers are worth checking: years, figures with a unit or a percent sign, and whole numbers from 100 up.
+     Small numbers ("3 steps", "version 2") are mostly counting, not facts. */
+  const checkable = n => n.year || n.scale || n.pct || n.v >= 100;
+
+  const NAME_RE = /\b\p{Lu}[\p{L}'’-]+(?:\s+(?:(?:of|de|del|da|di|van|von|der|la|le|al|bin|ibn|the)\s+)?\p{Lu}[\p{L}'’-]+)+/gu;
+  function namesOf(text) {
+    const out = [];
+    for (const m of text.matchAll(NAME_RE)) {
+      const before = text.slice(0, m.index).replace(/[ \t"“(\[]+$/, '');
+      const startOfSentence = !before || /[\n.!?:;]$/.test(before);
+      const after = text.slice(m.index + m[0].length);
+      // a run at the start of a sentence counts only when a verb-like lowercase word follows ("Emily Hart directed ..."); headings and labels do not
+      if (startOfSentence && !/^\s+\p{Ll}/u.test(after)) continue;
+      let toks = m[0].split(/\s+/);
+      while (toks.length && LEAD.has(toks[0].toLowerCase())) toks.shift();
+      toks = toks.filter(t => !MONTHS.has(t.toLowerCase()));
+      if (toks.length < 2) continue;
+      const name = toks.join(' ');
+      if (!out.some(o => o.toLowerCase() === name.toLowerCase())) out.push(name);
+    }
+    return out;
+  }
+
+  /* answer: the text to check. pool: everything the model was given for this question (notes, files, exact results, the user's words). */
+  function check(answer, pool) {
+    const text = prep(answer);
+    const src = String(pool || '');
+    const srcNums = numbersOf(src);
+    const srcWords = new Set(wordsOf(src));
+    const srcFold = fold(src);
+    const flagged = [];
+    let total = 0;
+    const seen = new Set();
+    for (const n of numbersOf(text)) {
+      if (!checkable(n)) continue;
+      const key = n.v + (n.year ? 'y' : '');
+      if (seen.has(key)) continue; seen.add(key);
+      total++;
+      const tol = n.year ? 0 : n.hedged ? 0.05 : 0.002;
+      const ok = srcNums.some(s => {
+        if (n.decade) return s.year && s.v >= n.v && s.v <= n.v + 9 || s.v === n.v;
+        if (n.year) return s.v === n.v || (s.decade && n.v >= s.v && n.v <= s.v + 9);
+        return Math.abs(s.v - n.v) <= tol * Math.max(Math.abs(s.v), Math.abs(n.v));
+      });
+      if (!ok) flagged.push({ kind: n.year ? 'year' : 'number', text: n.text.replace(/^[$€£]/, '') });
+    }
+    for (const name of namesOf(text)) {
+      total++;
+      const words = wordsOf(name).filter(w => w.length >= 3);
+      if (!words.length) { total--; continue; }
+      // found if the whole name, or any word of it, is in the sources: only names that are strangers to every source are reported
+      if (srcFold.includes(fold(name)) || words.some(w => srcWords.has(w))) continue;
+      flagged.push({ kind: 'name', text: name });
+    }
+    return { total, flagged: flagged.slice(0, 8) };
+  }
+  /* Everything the model was shown for this question except its own earlier answers and the example answers. */
+  const poolOf = messages => (messages || []).filter(m => m.role !== 'assistant').map(m => m.content).join('\n');
+  const listOf = items => items.map(i => '“' + i.text + '”').join(', ');
+  const repairMessage = items => `Check your answer against the notes above. ${items.length > 1 ? 'These details are' : 'This detail is'} not in the notes: ${listOf(items)}. Write the answer again. Keep every part that the notes support. For each detail above, take it out, or use what the notes say instead. If the notes do not answer the question, say that in one sentence. Do not mention this check.`;
+  return { check, poolOf, listOf, repairMessage, numbersOf, namesOf, prep };
+})();
 
 /* ---------- Daily review: flashcards that come back after 1, 2, 4, 8 and 16 days (five boxes) ----------
    Dates are local dates (the computer's own time zone), so a card never turns due at the wrong hour.
@@ -5696,9 +5892,9 @@ const Learn = (() => {
     title = clip(plain(title), 120);
     const base = title.replace(/\s*\(.*\)\s*$/, '');
     return {
-      id: hash((httpUrl(url) || title).toLowerCase()), title, url: httpUrl(url), site: clip(plain(site || 'Wikipedia'), 40), desc: clip(plain(desc), 80), text,
+      id: (src === 'liked' ? 'liked-' : '') + hash((httpUrl(url) || title).toLowerCase()), title, url: httpUrl(url), site: clip(plain(site || 'Wikipedia'), 40), desc: clip(plain(desc), 80), text,
       tt: kind === 'news' ? [] : coreTerms(base).slice(0, 8), bt: uniq(terms(text.slice(0, 520))).slice(0, 45),
-      kind: kind === 'news' ? 'news' : 'article', src: src === 'daily' ? 'daily' : 'lookup', topic: clip(plain(topic), 40), added: Date.now(), day: dayOf(), hits: 0,
+      kind: kind === 'news' ? 'news' : 'article', src: src === 'daily' ? 'daily' : src === 'liked' ? 'liked' : 'lookup', topic: clip(plain(topic), 40), added: Date.now(), day: dayOf(), hits: 0,
     };
   }
   /* Notes that fit this question. */
@@ -5749,15 +5945,26 @@ const Learn = (() => {
     }
     trim(); notify();
   }
+  /* An answer the person marked as good (it had sources, and the source check found nothing wrong): kept, and offered as a note when the same question comes again. */
+  async function saveLiked(question, answer) {
+    if (!L().library) return '';
+    await KB.load();
+    const title = clip(plain(String(question || '').replace(/[?!.\s]+$/, '')), 100);
+    const note = makeNote({ title, url: '', site: 'Answer you liked', desc: 'an answer you marked as good', text: plainText(answer), src: 'liked', kind: 'article', max: 900 });
+    if (!title || !note.tt.length || note.text.length < 40) return '';
+    KB.put(note); trim(); notify();
+    return note.id;
+  }
+  function forgetLiked(id) { if (!id || !KB.notes.has(id)) return; KB.del(id); notify(); }
   function trim() {
     const all = [...KB.notes.values()], now = Date.now();
     for (const n of all) if (n.src === 'daily' && now - n.added > 60 * DAY) KB.del(n.id);
-    for (const [src, cap] of [['daily', 250], ['lookup', 300]]) {
+    for (const [src, cap] of [['daily', 250], ['lookup', 300], ['liked', 150]]) {
       const rows = [...KB.notes.values()].filter(n => n.src === src);
       if (rows.length > cap) rows.sort((a, b) => ((a.hits || 0) - (b.hits || 0)) || (a.added - b.added)).slice(0, rows.length - cap).forEach(n => KB.del(n.id));
     }
   }
-  const counts = () => { const all = [...KB.notes.values()]; return { total: all.length, daily: all.filter(n => n.src === 'daily').length, lookup: all.filter(n => n.src !== 'daily').length }; };
+  const counts = () => { const all = [...KB.notes.values()]; return { total: all.length, daily: all.filter(n => n.src === 'daily').length, lookup: all.filter(n => n.src !== 'daily' && n.src !== 'liked').length, liked: all.filter(n => n.src === 'liked').length }; };
   const exportKB = () => [...KB.notes.values()];
   async function importKB(rows) {
     await KB.load(); let n = 0;
@@ -5991,7 +6198,7 @@ const Learn = (() => {
       if (wl.length) sect('Still looking for', h('p', { class: 'hint', text: 'Lumen could not find these when you asked. It tries again during the daily reading.' }),
         h('div', { class: 'lrn-tags' }, ...wl.map(w => h('span', { class: 'lrn-tag', text: clip(w.q, 40) }))));
       sect('Built-in facts', h('p', { class: 'hint', text: L().core === false ? 'Switched off in the learning settings.' : `${Core.count()} short facts come with Lumen (checked ${Core.checked()}): world leaders, science, history, geography, sports, big events and Slovenia. They work without internet and are given to the AI when they fit your question. They do not change by themselves; a new version of Lumen brings newer ones.` }));
-      sect('Saved notes', h('p', { class: 'hint', text: c.total ? `${c.total} notes saved on this computer: ${c.daily} from the daily reading and ${c.lookup} from your questions. Lumen uses them to answer faster and when there is no internet.` : 'No notes saved yet. Lumen saves what it looks up and what it reads each day.' }),
+      sect('Saved notes', h('p', { class: 'hint', text: c.total ? `${c.total} notes saved on this computer: ${c.daily} from the daily reading${c.liked ? ', ' + c.lookup + ' from your questions and ' + c.liked + ' answer' + (c.liked > 1 ? 's' : '') + ' you marked as good' : ' and ' + c.lookup + ' from your questions'}. Lumen uses them to answer faster and when there is no internet.` : 'No notes saved yet. Lumen saves what it looks up and what it reads each day.' }),
         h('div', { class: 'opt-row' }, h('button', { class: 'btn', type: 'button', text: 'Learning settings', onclick: () => { els.viewer.close(); openSettings('learn'); } })));
       box.append(h('p', { class: 'hint fine', text: 'This does not retrain the AI model. Lumen keeps notes on this computer and gives the right ones to the model with each question. Nothing leaves your computer except short search words.' }));
       return box;
@@ -6003,11 +6210,81 @@ const Learn = (() => {
 
   return {
     KB, on: fn => { listeners.add(fn); return () => listeners.delete(fn); }, notify, extract, classify, saveFact, undoFact, fromMessage, forgetNatural, promptParts, expand,
-    noteTurn, noteStyle, interests, outboundInterests, likedStyles, styleHints, suggestions, kbFor, markUsed, forQuestion, saveLookups, counts, exportKB, importKB,
+    noteTurn, noteStyle, interests, outboundInterests, likedStyles, styleHints, suggestions, kbFor, markUsed, forQuestion, saveLookups, saveLiked, forgetLiked, counts, exportKB, importKB,
     meaningFor, rememberMeaning, restoreMeaning, forgetMeaning, importMeanings, meanings, noteMiss, wishes, forgetWish,
     runDaily, due, start, statusLine, learnedLabel, showLearned, forgetHabits, forgetLibrary, isRunning: () => running, today, pretty, STYLE_WORDS,
     ready: () => KB.load(),
   };
+})();
+
+/* ---------- good answer / wrong answer: how the person teaches Lumen ----------
+   Good: the answer is counted, and (when it had sources and the source check found nothing wrong) kept, so the same question gets the same good answer.
+   Wrong: a small form asks what went wrong and what is right. The right answer is saved as something the person taught Lumen
+   (it goes into every answer about that question and can be deleted in Settings → Memory), and the topic is read about again in the daily reading.
+   Nothing here goes anywhere but this computer. */
+const Teach = (() => {
+  const WHY = [['wrong', 'A fact is wrong'], ['invented', 'It made things up'], ['off', 'It did not answer my question'], ['other', 'Something else']];
+  const WHY_LABEL = Object.fromEntries(WHY);
+  const questionFor = (chat, m) => {
+    const i = chat.messages.indexOf(m);
+    for (let k = i - 1; k >= 0; k--) if (chat.messages[k].role === 'user') return String(chat.messages[k].content || '');
+    return '';
+  };
+  const repaint = (chat, m) => { saveChat(chat); const n = nodeFor(m); if (n) fillAssistant(n, m, chat); };
+  /* Only an answer that rests on sources and passed the source check is worth keeping for next time. */
+  const canKeep = m => !!(m.content && !m.widget && m.state === 'done' && m.sources?.length && !m.ground?.bad?.length && !m.care);
+
+  async function good(chat, m) {
+    if (m.rating === 'up') {   // pressed again: take it back
+      m.rating = ''; Usage.addRating('u', -1);
+      if (m.likedId) { Learn.forgetLiked(m.likedId); m.likedId = ''; }
+      repaint(chat, m); return;
+    }
+    if (m.rating === 'down') Usage.addRating('d', -1);
+    m.rating = 'up'; m.ratingWhy = ''; Usage.addRating('u', 1);
+    let kept = false;
+    if (canKeep(m)) { const id = await Learn.saveLiked(questionFor(chat, m), m.content).catch(() => ''); if (id) { m.likedId = id; kept = true; } }
+    repaint(chat, m);
+    toast(kept ? 'Thanks. Lumen saved this answer and will use it when you ask the same thing again.' : 'Thanks. Lumen noted that this answer was good.');
+  }
+
+  function wrongForm() {
+    return new Promise(resolve => {
+      const d = $('#teach'), form = $('#teachForm'), fix = $('#teachFix'), list = $('#teachWhy');
+      list.replaceChildren(...WHY.map(([k, label], i) => h('label', { class: 'check' }, h('input', { type: 'radio', name: 'teachWhy', value: k, checked: i === 0 }), h('span', { text: label }))));
+      fix.value = '';
+      let result = { ok: false };
+      const onSubmit = e => { e.preventDefault(); result = { ok: true, why: form.querySelector('input[name="teachWhy"]:checked')?.value || 'other', fix: fix.value.replace(/\s+/g, ' ').trim() }; d.close(); };
+      const onCancel = () => d.close();
+      const onClose = () => { form.removeEventListener('submit', onSubmit); $('#teachCancel').removeEventListener('click', onCancel); d.removeEventListener('close', onClose); resolve(result); };
+      form.addEventListener('submit', onSubmit); $('#teachCancel').addEventListener('click', onCancel); d.addEventListener('close', onClose);
+      d.showModal();
+      setTimeout(() => list.querySelector('input')?.focus(), 0);
+    });
+  }
+  async function wrong(chat, m) {
+    if (m.rating === 'down') {   // pressed again: take it back (a correction that was saved stays in Settings → Memory until you delete it)
+      m.rating = ''; m.ratingWhy = ''; Usage.addRating('d', -1);
+      repaint(chat, m); return;
+    }
+    const res = await wrongForm();
+    if (!res.ok) return;
+    if (m.rating === 'up') { Usage.addRating('u', -1); if (m.likedId) { Learn.forgetLiked(m.likedId); m.likedId = ''; } }
+    m.rating = 'down'; m.ratingWhy = res.why; Usage.addRating('d', 1);
+    const q = questionFor(chat, m);
+    let saved = false, full = false;
+    if (res.fix.length >= 6) {
+      // "About “the question”: the right answer", so it is found whenever that question (or a close one) comes again
+      const r = Learn.saveFact(`About “${clip(q.replace(/\s+/g, ' ').trim(), 50)}”: ${clip(res.fix, 120)}`, { kind: 'taught', src: 'you' });
+      if (r.item) { saved = true; Usage.addRating('k', 1); Learn.notify(); } else if (r.error === 'full') full = true;
+    }
+    Learn.noteMiss(q);   // the topic goes on the list for the daily reading
+    repaint(chat, m);
+    const last = chat.messages[chat.messages.length - 1] === m;
+    if (saved) toast('Thanks. Lumen will remember this.', last && !App.run ? { label: 'Answer again', run: () => regenerate(chat, m) } : undefined);
+    else toast(full ? 'Lumen’s memory is full, so your correction was not saved. Forget something in Settings → Memory first.' : 'Thanks. Lumen noted that this answer was wrong.');
+  }
+  return { good, wrong, questionFor, canKeep, WHY_LABEL };
 })();
 
 /* made from examples.json by gen_examples.py: 20 model answers in the style Lumen should use */
@@ -6551,7 +6828,7 @@ async function endRun(run, t0) {
   await saveChat(chat);
   if (chat.id === App.currentId) { const n = nodeFor(am); if (n) fillAssistant(n, am, chat); else renderThread(); }
   renderSidebar(); updateComposer(); updateMeter();
-  if (am.state === 'done') { try { Usage.addAnswer(am.mode); } catch {} scheduleSummary(chat); }
+  if (am.state === 'done') { try { Usage.addAnswer(am.mode, am.ground); } catch {} scheduleSummary(chat); }
 }
 
 /* Should the files attached to this chat be used for this question? */
@@ -6661,6 +6938,7 @@ async function runTurn(chat, userMsg) {
     // Voting: Deep mode, a short checkable answer; the model is asked to end with "Final answer: X"
     const voting = mode.key === 'deep' && !Saver.active() && !docsOn && !notes?.exact?.length && !userMsg.study && !userMsg.essay && (ovr.vote || (S.vote.on && voteWorthy(question))) && !!built.messages.length;
     if (voting) { const lu = built.messages[built.messages.length - 1]; built.messages[built.messages.length - 1] = { ...lu, content: lu.content + VOTE_ASK }; }
+    const grounded = !!(notes?.block || docs?.block || notes?.exact?.length);   // the answer rests on sources: steadier sampling
     setWork(am, mode.think ? 'Thinking it through' : 'Writing the answer', mode.think ? 0 : null);
     am.phase = mode.think ? 'thinking' : 'answer';
 
@@ -6673,7 +6951,7 @@ async function runTurn(chat, userMsg) {
     const thinkingNow = () => mode.think && kind !== 'answer';
     const toAnswer = () => { kind = 'answer'; am.thinking = ''; am.tThink0 = 0; thinkTokens = 0; };
     const res = await Brain.generate({
-      messages: built.messages, think: mode.think, ...samplingFor(mode.think), max_tokens: P.outMax,
+      messages: built.messages, think: mode.think, ...samplingFor(mode.think, grounded), max_tokens: P.outMax,
       onDelta: (d, full) => {
         raw = full; tokens++;
         if (kind === null) {
@@ -6721,7 +6999,7 @@ async function runTurn(chat, userMsg) {
       const msgs2 = built.messages.slice(0, -1).concat([{ role: 'user', content: last.content + (notesSoFar ? `\n\n(Your reasoning notes so far:\n${notesSoFar}\n)` : '') + '\n\nNow write the final answer for me. Do not repeat the notes.' }]);
       let n2 = 0;
       const res2 = await Brain.generate({
-        messages: msgs2, think: false, ...samplingFor(false), max_tokens: P.answerMax,
+        messages: msgs2, think: false, ...samplingFor(false, grounded), max_tokens: P.answerMax,
         onDelta: (d, full) => {
           n2++;
           am.content = splitStream(full, false).answer;
@@ -6760,6 +7038,23 @@ async function runTurn(chat, userMsg) {
       am.solveMissing = solveParts(am.content);
     }
     if (playbook === 'math' && am.content) am.mathCheck = checkArithmetic(am.content);
+    // source check: a date, number or name that is in none of the sources gets one repair try (see 156-ground.js)
+    if (am.content && !run.stopped && !voting && playbook !== 'math' && (notes?.block || docs?.block)) {
+      const pool = Ground.poolOf(built.messages);
+      const g = Ground.check(am.content, pool);
+      am.ground = { n: g.total, bad: g.flagged.map(f => f.text) };
+      if (g.flagged.length && S.check && !Saver.active() && !answerLoop && finish !== 'length') {
+        setWork(am, 'Checking the answer against the sources', null);
+        const fix = await Brain.generate({ messages: [...built.messages, { role: 'assistant', content: am.content }, { role: 'user', content: Ground.repairMessage(g.flagged) }],
+          think: false, ...samplingFor(false), temperature: 0.3, top_p: 0.8, max_tokens: P.answerMax }).catch(() => null);
+        const better = fix && fix.finish !== 'length' ? cleanAnswer(splitStream(fix.text, false).answer).trim() : '';
+        const g2 = better.length >= 20 && !run.stopped ? Ground.check(better, pool) : null;
+        if (g2 && g2.flagged.length < g.flagged.length) {
+          am.ground = { n: g2.total, bad: g2.flagged.map(f => f.text), fixed: g.flagged.map(f => f.text).filter(t => !g2.flagged.some(x => x.text === t)) };
+          am.content = better;
+        } else am.ground.tried = true;
+      }
+    }
     const secs = (performance.now() - t0) / 1000;
     const tps = usage?.extra?.decode_tokens_per_s || 0;
     am.stats = { tps, secs, tokens: usage?.completion_tokens || 0, prompt: usage?.prompt_tokens || built.used, dropped: built.dropped };
@@ -8581,7 +8876,7 @@ const LEGAL_PAGES = {
     lh('Your chats stay on your device'),
     lp('The AI model runs inside your browser. Your messages and Lumen’s answers are not sent to me or to any AI company. I cannot see, read or get them back.'),
     lh('What is saved on your device'),
-    lul(['Your chats, in the browser’s database (IndexedDB).', 'Your settings, memory and learned habits (localStorage).', 'Usage numbers: how many answers and tokens, and how long Lumen was open and in use, one small line per day (localStorage). They hold no text from your chats.', 'Notes from look-ups, and files you added, as short saved text (IndexedDB).',
+    lul(['Your chats, in the browser’s database (IndexedDB).', 'Your settings, memory and learned habits (localStorage).', 'Usage numbers: how many answers and tokens, how many answers you marked good or wrong, how many were checked against sources, and how long Lumen was open and in use, one small line per day (localStorage). They hold no text from your chats.', 'Notes from look-ups, answers you marked as good, and files you added, as short saved text (IndexedDB). A correction you type after marking an answer wrong is saved with your memory.',
       'The offline Wikipedia copy, only if you add one (IndexedDB).', 'The AI model files and a copy of this page so it opens without internet (browser storage).']),
     lp('Lumen needs this to work the way you asked, so there is no cookie banner. Lumen uses no tracking, no analytics, no ads and no accounts.'),
     h('div', { class: 'row' }, h('button', { class: 'btn', type: 'button', text: 'Delete all my data…', onclick: () => { closeLegal(); openSettings('storage'); } })),
@@ -9000,7 +9295,9 @@ function openSettings(focus) {
   b.append(sec('answers', 'Answers',
     row('Thinking', 'How much Lumen thinks before it answers.', seg('Thinking', Object.values(MODES).map(m => [m.key, m.label]), S.mode, v => { S.mode = v; saveSettings(); renderPills(); })),
     row('Style', 'How answers are written.', seg('Answer style', Object.entries(STYLES).map(([k, v]) => [k, v.label]), S.style, v => { S.style = v; saveSettings(); renderPills(); })),
-    row('Creativity', 'Precise is best for math and facts.', seg('Creativity', [['precise', 'Precise'], ['balanced', 'Balanced'], ['creative', 'Creative']], S.creativity, v => { S.creativity = v; saveSettings(); }))));
+    row('Creativity', 'Precise is best for math and facts.', seg('Creativity', [['precise', 'Precise'], ['balanced', 'Balanced'], ['creative', 'Creative']], S.creativity, v => { S.creativity = v; saveSettings(); })),
+    row('Check answers against sources', 'When an answer has a date, number or name that no source contains, Lumen writes it again once without it. It takes a little longer, only when needed.',
+      seg('Check answers against sources', [['on', 'On'], ['off', 'Off']], S.check ? 'on' : 'off', v => { S.check = v === 'on'; saveSettings(); }))));
   const srcBox = h('div', { class: 'src-list' });
   sourceRows(srcBox);
   const checkBtn = h('button', { class: 'btn', type: 'button', html: `${icon('refresh', 15)}<span>Check connections</span>`, onclick: () => checkConnections(checkBtn, srcBox) });
@@ -9223,7 +9520,7 @@ const SET_PAGES = [
   { id: 'memory', icon: 'bookmark', title: 'Memory', sub: 'What Lumen remembers and learns', secs: ['memory', 'rules', 'learn'] },
   { id: 'lookups', icon: 'globe', title: 'Look-ups', sub: 'Where Lumen finds facts', secs: ['sources', 'web', 'wikipack'] },
   { id: 'voice', icon: 'mic', title: 'Voice', sub: 'Read aloud and dictation', secs: ['voice', 'dictate'] },
-  { id: 'usage', icon: 'chart', title: 'Usage', sub: 'Tokens, answers and screen time', secs: ['usage', 'usagechart', 'usagemodels', 'usagecare'] },
+  { id: 'usage', icon: 'chart', title: 'Usage', sub: 'Tokens, answer quality and screen time', secs: ['usage', 'quality', 'usagechart', 'usagemodels', 'usagecare'] },
   { id: 'data', icon: 'shield', title: 'Data and privacy', sub: 'Storage, backups and what leaves this computer', secs: ['storage', 'privacy'] },
   { id: 'advanced', icon: 'code', title: 'Advanced', sub: 'Instructions, examples, tests and shortcuts', secs: ['prompt', 'examples', 'vote', 'lab', 'keys'] },
   { id: 'about', icon: 'info', title: 'About', sub: 'How Lumen works and credits', secs: ['how'] },
@@ -9282,6 +9579,8 @@ function niceMax(m) {
 const USAGE_METRICS = {
   tokens: { label: 'Tokens', unit: 'tokens', get: d => d.tokens, fmt: v => fmtNum(v), long: v => usageLabel(v, 'token', 'tokens') },
   answers: { label: 'Answers', unit: 'answers', get: d => d.answers, fmt: v => String(Math.round(v)), long: v => usageLabel(v, 'answer', 'answers') },
+  quality: { label: 'Checked OK', unit: 'checked answers', get: d => (d.checked ? Math.round(100 * d.ok / d.checked) : 0), fmt: v => v + '%',
+    long: (v, d) => (d && d.checked ? `${v}% of ${usageLabel(d.checked, 'checked answer', 'checked answers')} had every date, number and name in the sources` : 'no checked answers'), none: 'No checked answers in the last 14 days yet. They appear when an answer used sources.' },
   minutes: { label: 'Minutes', unit: 'minutes', get: d => d.minutes, fmt: v => (v >= 60 ? (v / 60).toFixed(1).replace('.0', '') + ' h' : Math.round(v) + ' min'), long: v => (v < 1 && v > 0 ? 'under 1 minute' : usageLabel(v, 'minute', 'minutes')) },
 };
 let usageUiTimer = null;
@@ -9310,6 +9609,26 @@ function usageSection() {
     modeBox.replaceChildren(...(drows.length ? drows.map(r => meter(r[0], r[1], dtotal, usageLabel(r[1], 'answer', 'answers'))) : [h('p', { class: 'hint', text: 'No answers yet in this time.' })]));
     if (t.l) modeBox.append(h('p', { class: 'hint', id: 'uLab', text: `${fmtNum(t.l)} of the tokens above were used by the Test lab.` }));
   }
+  /* Answer quality: how often the source check found everything, what Lumen fixed, what the person rated, and what Lumen has learned so far. */
+  const qTiles = h('div', { class: 'u-tiles', id: 'qTiles' }), qTrend = h('p', { class: 'hint', id: 'qTrend' }), qLearn = h('dl', { class: 'kv u-kv', id: 'qLearn' });
+  function paintQuality() {
+    const t = Usage.totals(period), q = t.q, okN = q.c + q.x;
+    qTiles.replaceChildren(
+      tile('Checked answers', String(q.s), q.s ? `${Math.round(100 * okN / q.s)}% had every date, number and name in the sources` : 'Answers that used sources are checked', 'qChecked'),
+      tile('Fixed by Lumen', String(q.x), q.x ? 'Rewritten after the source check' : 'None needed yet', 'qFixed'),
+      tile('Marked good', String(q.u), q.u ? 'Kept for the same question' : 'Use the thumbs under an answer', 'qGood'),
+      tile('Marked wrong', String(q.d), q.k ? `${q.k} correction${q.k > 1 ? 's' : ''} taught` : q.d ? 'No correction typed' : 'None yet', 'qWrong'));
+    const days = Usage.series(14), sumOf = a => a.reduce((n, d) => ({ s: n.s + d.checked, ok: n.ok + d.ok }), { s: 0, ok: 0 });
+    const now = sumOf(days.slice(7)), before = sumOf(days.slice(0, 7));
+    if (now.s >= 3 && before.s >= 3) {
+      const a = Math.round(100 * now.ok / now.s), b = Math.round(100 * before.ok / before.s), diff = a - b;
+      qTrend.textContent = `Last 7 days: ${a}% checked OK. The 7 days before: ${b}%. ${diff > 0 ? `That is ${diff} points better.` : diff < 0 ? `That is ${-diff} points lower.` : 'No change.'}`;
+    } else qTrend.textContent = 'A comparison with the week before appears after a few checked answers in each week.';
+    const c = Learn.counts(), taught = S.memory.filter(m => m.kind === 'taught').length;
+    qLearn.replaceChildren(h('dt', { text: 'Saved notes' }), h('dd', { id: 'qNotes', text: `${c.total - c.liked}` }), h('dt', { text: 'Answers you liked' }), h('dd', { id: 'qLiked', text: String(c.liked) }),
+      h('dt', { text: 'Corrections you taught' }), h('dd', { id: 'qTaught', text: String(taught) }), h('dt', { text: 'Meanings you chose' }), h('dd', { text: String(Learn.meanings().length) }),
+      h('dt', { text: 'Topics to read about' }), h('dd', { text: String(Learn.wishes().length) }));
+  }
   function meter(name, v, total, right, sub) {
     const pct = total > 0 ? Math.max(2, Math.round(v / total * 100)) : 0;
     const bar = h('div', { class: 'u-bar', role: 'img', 'aria-label': `${name}: ${Math.round(v / (total || 1) * 100)} percent` }, h('i', {}));
@@ -9321,21 +9640,21 @@ function usageSection() {
     const M = USAGE_METRICS[metric], days = Usage.series(14), vals = days.map(M.get), max = Math.max(...vals);
     tableBtn.textContent = asTable ? 'Show as chart' : 'Show as table'; tableBtn.setAttribute('aria-pressed', String(asTable));
     if (asTable) {
-      const tb = h('table', { class: 'u-table', id: 'uTable' }, h('thead', {}, h('tr', {}, ...['Day', 'Tokens', 'Answers', 'Minutes'].map(x => h('th', { scope: 'col', text: x })))),
-        h('tbody', {}, ...[...days].reverse().map(d => h('tr', {}, h('th', { scope: 'row', text: usageDate(d.date, true) }), h('td', { text: d.tokens.toLocaleString('en-US') }), h('td', { text: String(d.answers) }), h('td', { text: String(d.minutes) })))));
+      const tb = h('table', { class: 'u-table', id: 'uTable' }, h('thead', {}, h('tr', {}, ...['Day', 'Tokens', 'Answers', 'Minutes', 'Checked OK', 'Rated'].map(x => h('th', { scope: 'col', text: x })))),
+        h('tbody', {}, ...[...days].reverse().map(d => h('tr', {}, h('th', { scope: 'row', text: usageDate(d.date, true) }), h('td', { text: d.tokens.toLocaleString('en-US') }), h('td', { text: String(d.answers) }), h('td', { text: String(d.minutes) }), h('td', { text: d.checked ? `${d.ok} of ${d.checked}` : '–' }), h('td', { text: d.up || d.down ? `${d.up} good, ${d.down} wrong` : '–' })))));
       chartBox.replaceChildren(tb); return;
     }
-    if (!(max > 0)) { chartBox.replaceChildren(h('p', { class: 'hint u-empty', id: 'uEmpty', text: `No ${M.unit} in the last 14 days yet.` })); return; }
+    if (!(max > 0)) { chartBox.replaceChildren(h('p', { class: 'hint u-empty', id: 'uEmpty', text: M.none || `No ${M.unit} in the last 14 days yet.` })); return; }
     const top = niceMax(max), last = days.length - 1, maxAt = vals.indexOf(max);
     const tip = h('div', { class: 'u-tip', role: 'tooltip', hidden: true });
     const cols = h('div', { class: 'u-cols' });
     days.forEach((d, i) => {
       const v = vals[i], isToday = i === last;
       const bar = h('i', { class: 'u-b' }); bar.style.height = (v / top * 100) + '%';
-      const col = h('div', { class: 'u-col', tabindex: '0', role: 'img', 'aria-label': `${usageDate(d.date, true)}: ${M.long(v)}`, 'data-v': String(v) }, v > 0 ? bar : null,
+      const col = h('div', { class: 'u-col', tabindex: '0', role: 'img', 'aria-label': `${usageDate(d.date, true)}: ${M.long(v, d)}`, 'data-v': String(v) }, v > 0 ? bar : null,
         v > 0 && (i === maxAt || isToday) ? h('span', { class: 'u-val', text: M.fmt(v) }) : null);
       if (v > 0 && (i === maxAt || isToday)) col.querySelector('.u-val').style.bottom = `calc(${v / top * 100}% + 3px)`;
-      const show = () => { tip.textContent = `${usageDate(d.date, true)} · ${M.long(v)}`; tip.hidden = false; const w = chartPlot.clientWidth, x = col.offsetLeft + col.offsetWidth / 2; tip.style.left = Math.min(Math.max(x, tip.offsetWidth / 2), w - tip.offsetWidth / 2) + 'px'; };
+      const show = () => { tip.textContent = `${usageDate(d.date, true)} · ${M.long(v, d)}`; tip.hidden = false; const w = chartPlot.clientWidth, x = col.offsetLeft + col.offsetWidth / 2; tip.style.left = Math.min(Math.max(x, tip.offsetWidth / 2), w - tip.offsetWidth / 2) + 'px'; };
       col.addEventListener('pointerenter', show); col.addEventListener('focus', show);
       col.addEventListener('pointerleave', () => { tip.hidden = true; }); col.addEventListener('blur', () => { tip.hidden = true; });
       cols.append(col);
@@ -9350,14 +9669,14 @@ function usageSection() {
     visitBox.replaceChildren(h('dt', { text: 'Open and in use' }), h('dd', { id: 'uVisitTime', text: fmtDur(s.t) }), h('dt', { text: 'Answers' }), h('dd', { text: String(s.a) }), h('dt', { text: 'Tokens' }), h('dd', { text: fmtNum(s.i + s.o) }));
     careBox.replaceChildren(h('dt', { text: 'Days in a row' }), h('dd', { id: 'uStreak', text: String(Usage.streak()) }), h('dt', { text: 'Days recorded' }), h('dd', { text: String(n) }), h('dt', { text: 'Space used' }), h('dd', { text: `about ${kb} KB` }));
   }
-  const paintAll = () => { paintTiles(); paintChart(); paintCare(); chartSig = JSON.stringify(Usage.series(14)); };
+  const paintAll = () => { paintTiles(); paintQuality(); paintChart(); paintCare(); chartSig = JSON.stringify(Usage.series(14)); };
   tableBtn.addEventListener('click', () => { asTable = !asTable; paintChart(); });
 
-  const periodSeg = seg('Time range', USAGE_PERIODS.map(([v, l]) => [v, l]), period, v => { period = v; paintTiles(); });
+  const periodSeg = seg('Time range', USAGE_PERIODS.map(([v, l]) => [v, l]), period, v => { period = v; paintTiles(); paintQuality(); });
   const metricSeg = seg('Show', Object.entries(USAGE_METRICS).map(([k, m]) => [k, m.label]), metric, v => { metric = v; paintChart(); });
   const summary = () => {
     const t = Usage.totals(period), name = USAGE_PERIODS.find(p => p[0] === period)[1].toLowerCase();
-    return `Lumen usage (${name})\nTokens: ${t.i + t.o} (${t.i} read, ${t.o} written)\nAnswers: ${t.a}\nScreen time: ${t.t ? fmtDur(t.t) : '0 min'}\nSpeed: ${t.tps ? t.tps.toFixed(1) + ' tokens per second' : 'not measured yet'}`;
+    return `Lumen usage (${name})\nTokens: ${t.i + t.o} (${t.i} read, ${t.o} written)\nAnswers: ${t.a}\nScreen time: ${t.t ? fmtDur(t.t) : '0 min'}\nSpeed: ${t.tps ? t.tps.toFixed(1) + ' tokens per second' : 'not measured yet'}\nChecked answers: ${t.q.s} (${t.q.c + t.q.x} had every date, number and name in the sources, ${t.q.x} fixed by Lumen)\nMarked good: ${t.q.u}, marked wrong: ${t.q.d}`;
   };
   const sec = (id, title, ...kids) => h('section', { id: 'set-' + id }, title ? h('h3', { text: title }) : null, ...kids);
   const nudge = h('div', { class: 'set-row' }, h('div', { class: 'lt' }, h('b', { text: 'Break reminder' }), h('span', { text: 'A small message after 45 minutes of use. Off by default.' })),
@@ -9366,6 +9685,9 @@ function usageSection() {
   const out = [
     sec('usage', 'Overview', h('div', { class: 'u-top' }, periodSeg), tiles, foot,
       h('details', { class: 'more' }, h('summary', { text: 'What is a token?' }), h('p', { class: 'hint', text: 'A token is a small piece of a word. About 4 tokens make 3 words. “Read” tokens are what Lumen was given (your question, notes and chat). “Written” tokens are what it wrote back. Screen time counts only while Lumen is open, visible and in use.' }))),
+    sec('quality', 'Answer quality', h('p', { class: 'hint', text: 'Uses the time range chosen under Overview.' }), qTiles, qTrend,
+      h('details', { class: 'more' }, h('summary', { text: 'How does Lumen get better?' }), h('p', { class: 'hint', text: 'The AI model itself does not change inside a web page. What gets better is what Lumen gives it: saved notes from the daily reading, your corrections, answers you marked as good, and the source check that finds details no source contains. “Checked OK” counts answers where every date, number and name was found in the sources, after any fix Lumen made.' })),
+      h('h4', { text: 'What Lumen has learned so far' }), qLearn, h('div', { class: 'opt-row' }, h('button', { class: 'btn', type: 'button', text: 'See what Lumen has learned', onclick: () => Learn.showLearned() }))),
     sec('usagechart', 'Last 14 days', h('div', { class: 'u-top' }, metricSeg, tableBtn), chartBox),
     sec('usagemodels', 'Where the tokens went', h('h4', { text: 'By model' }), modelBox, h('h4', { text: 'By thinking mode' }), modeBox),
     sec('usagecare', 'This visit and care', visitBox, h('hr', { class: 'thin' }), careBox, nudge,
@@ -9379,7 +9701,7 @@ function usageSection() {
   usageUiTimer = setInterval(() => {
     if (!tiles.isConnected) { clearInterval(usageUiTimer); return; }
     if (!els.settings.open || tiles.closest('[hidden]')) return;
-    paintTiles(); paintCare();
+    paintTiles(); paintQuality(); paintCare();
     const sig = JSON.stringify(Usage.series(14));      // redraw the chart only when its numbers changed (so a tooltip is not wiped)
     if (sig !== chartSig) { chartSig = sig; paintChart(); }
   }, 5000);
@@ -9500,7 +9822,7 @@ window.addEventListener('beforeunload', e => { if (Brain.state === 'loading' && 
   if (!narrow()) els.input.focus();
 })();
 try { window.hljs?.configure({ ignoreUnescapedHTML: true }); } catch {}
-window.__lumen = { Usage, LEGAL, Care, openLegal, labelCopy, showReadBox, WikiPack, Speech, Dictation, Lab, LabScore, LAB_QUESTIONS, LAB_PUZZLES, openLab, App, Brain, S, Calc, Net, Cache, splitStream, looping, trimRepeat, thinkTitle, renderMarkdown, shouldLookUp, keywordQuery, entityQuery, terms, cleanAnswer,
+window.__lumen = { Bigger, Teach, Ground, Usage, LEGAL, Care, openLegal, labelCopy, showReadBox, WikiPack, Speech, Dictation, Lab, LabScore, LAB_QUESTIONS, LAB_PUZZLES, openLab, App, Brain, S, Calc, Net, Cache, splitStream, looping, trimRepeat, thinkTitle, renderMarkdown, shouldLookUp, keywordQuery, entityQuery, terms, cleanAnswer,
   localToolLines, timeNotes, unitNotes, fxIntent, weatherIntent, cryptoIntent, gather, selectDocText, chunkDoc, pickMode, pickPlaybook, planBudget, buildMessages, parseSlash, jsonFromText, STUDY_CHECK, readFileText, summarizeDocs, scheduleSummary, addMemory, Learn, Core, confidenceOf, Saver, Review, ROLES, setRole, getRole, solveParts, checkArithmetic, essayParagraphs, quoteInText, verifyComments, pickTop, runEssay, factCheck, claimsFrom, debateBalance, showFactCheck, chatToMarkdown, openSettings, submitText, send, wantDocs, plainText, slidesToHtml, chatToHtml, wikidataProps, webSearch, readPage, forkAt, switchFork, forkInfo, voteWorthy, finalAnswerOf, voteKey, voteTally, Examples, PROMPT_VERSIONS, basePrompt, EXAMPLES, systemPrompt, importBackup, Store, openChat, renderThread, saveChat, regenerate, resendEdited };
 </script>
 </body>
