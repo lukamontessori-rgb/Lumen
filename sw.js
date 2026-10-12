@@ -1,6 +1,6 @@
 // Lumen service worker: lets the page itself open without internet after the first visit.
 // The AI model files are cached separately by the WebLLM engine (in its own "webllm/..." caches).
-const SHELL = 'lumen-shell-v13';
+const SHELL = 'lumen-shell-v14';
 const CDN = 'lumen-cdn-v1';
 const SHELL_FILES = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 

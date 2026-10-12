@@ -203,7 +203,7 @@ kbd { font: 500 11px/1 var(--font-ui); color: var(--muted); border: 1px solid va
 /* ---------- messages ---------- */
 .msg { margin: 26px 0; }
 .msg-user { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
-.bubble { background: var(--surface-2); padding: 10px 16px; border-radius: 20px; max-width: min(82%, 600px); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15.5px; line-height: 1.55; }
+.bubble { background: var(--surface-2); padding: 10px 16px; border-radius: 20px; max-width: min(82%, 600px); white-space: pre-wrap; overflow-wrap: anywhere; font-size: calc(15.5px * var(--tscale, 1)); line-height: 1.55; }
 .msg-user .row-acts { display: flex; gap: 2px; opacity: 0; transition: opacity .15s; }
 .msg-user:hover .row-acts, .msg-user:focus-within .row-acts { opacity: 1; }
 .edit-box { width: min(100%, 620px); display: flex; flex-direction: column; gap: 8px; }
@@ -231,7 +231,7 @@ kbd { font: 500 11px/1 var(--font-ui); color: var(--muted); border: 1px solid va
 .thought[open] summary .ic { transform: none; }
 .thought .tbody { margin-top: 8px; padding: 2px 0 2px 14px; border-left: 2px solid var(--line-2); color: var(--muted); font-size: 13.5px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 300px; overflow-y: auto; }
 
-.md { font-family: var(--font-serif); font-size: 17px; line-height: 1.7; overflow-wrap: anywhere; min-width: 0; color: var(--ink); }
+.md { font-family: var(--font-serif); font-size: calc(17px * var(--tscale, 1)); line-height: 1.7; overflow-wrap: anywhere; min-width: 0; color: var(--ink); }
 .md > :first-child { margin-top: 0; }
 .md > :last-child { margin-bottom: 0; }
 .md p { margin: 0 0 .85em; }
@@ -335,7 +335,7 @@ dialog.sheet::backdrop { background: rgba(30, 24, 14, .38); }
   .app.nav-open .scrim { display: block; position: fixed; inset: 0; background: rgba(30, 24, 14, .35); z-index: 30; }
   .menu-btn { display: grid; }
   #railClose { display: none; }
-  .md { font-size: 16.5px; }
+  .md { font-size: calc(16.5px * var(--tscale, 1)); }
   .jump { bottom: 158px; }
   .column { padding-left: 18px; padding-right: 18px; }
   .dock { padding-left: 14px; padding-right: 14px; }
@@ -741,6 +741,106 @@ dialog.legal .priv { margin: 6px 0; }
 dialog.legal .row { display: flex; gap: 8px; margin: 6px 0; }
 @media (max-width: 640px) { dialog.legal .lg-tabs { padding: 10px 16px 0; } .legal-links { font-size: 11px; gap: 0 12px; } }
 @media (pointer: coarse) { dialog.legal .lg-tab { min-height: 38px; } .legal-links a { padding: 8px 0; } }
+
+/* ---- Settings: a menu on the left, one page at a time (on a phone: a list first, then the page) ---- */
+dialog.sheet.settings { width: min(940px, calc(100vw - 32px)); height: min(84vh, 720px); max-height: none; overflow: hidden; }
+dialog.sheet.settings[open] { display: flex; flex-direction: column; }
+dialog.sheet.settings .sheet-head { position: static; flex: none; justify-content: flex-start; gap: 6px; }
+dialog.sheet.settings .sheet-head h2 { flex: 1; }
+.set-shell { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 236px minmax(0, 1fr); }
+.set-nav { overflow-y: auto; padding: 10px; background: var(--rail); border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
+.set-tab { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 11px; border: 0; border-radius: 10px; background: transparent; color: var(--ink-2); text-align: left; font-size: 14px; }
+.set-tab .nt { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.set-tab b { font-weight: 600; }
+.set-tab small, .set-tab .nc { display: none; }
+.set-tab .ni { display: grid; color: var(--muted); }
+.set-tab:hover { background: var(--hover); }
+.set-tab[aria-current="page"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); }
+.set-tab[aria-current="page"] .ni { color: var(--accent); }
+.set-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--bg); }
+.set-main .sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: block; padding: 24px 28px 36px; }
+.set-page { display: flex; flex-direction: column; gap: 14px; max-width: 640px; }
+.set-ptitle { font: 500 25px/1.2 var(--font-serif); margin: 0; }
+.set-psub { margin: -8px 0 4px; color: var(--muted); font-size: 13.5px; }
+.sheet .set-page section, .sheet .set-page section:last-child { padding: 16px 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); gap: 12px; }
+.sheet .set-page section h3 { font: 650 15px/1.3 var(--font-ui); }
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; }
+.set-row + .set-row { border-top: 1px solid var(--line); padding-top: 12px; }
+.set-row .lt { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 180px; }
+.set-row .lt b { font-weight: 600; font-size: 14px; }
+.set-row .lt span { color: var(--muted); font-size: 13px; line-height: 1.4; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.sheet details.more { font-size: 13px; }
+.sheet details.more > summary { cursor: pointer; color: var(--accent); font-weight: 600; list-style: none; width: fit-content; border-radius: 6px; }
+.sheet details.more > summary::-webkit-details-marker { display: none; }
+.sheet details.more > summary::before { content: "+"; display: inline-block; width: 1.1em; }
+.sheet details.more[open] > summary::before { content: "−"; }
+.sheet details.more > p { margin: 6px 0 0; }
+.sr-more { margin-top: 2px; font-size: 12.5px; }
+.sr-more > summary { cursor: pointer; color: var(--accent); width: fit-content; }
+.sr-more .sr-sends, .sr-more .sr-what { display: block; margin-top: 2px; }
+.sheet .set-page .hint { max-width: none; }
+.src-row .dot { margin-top: 7px; }
+.btn.small { padding: 4px 10px; font-size: 13px; }
+.set-page section > textarea { width: 100%; border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px; background: var(--bg); font-size: 14px; outline: none; min-height: 84px; resize: vertical; }
+.set-page section > textarea:focus { border-color: var(--accent); }
+
+/* Usage */
+.u-top { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }
+.u-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px; }
+.u-tile { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.u-l { color: var(--muted); font-size: 12.5px; }
+.u-v { font: 500 27px/1.15 var(--font-serif); font-variant-numeric: tabular-nums; }
+.u-s { color: var(--muted); font-size: 12px; line-height: 1.35; }
+.u-chart { position: relative; padding: 20px 0 0; }
+.u-plot { position: relative; height: 150px; }
+.u-grid { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; }
+.u-grid i { display: block; height: 0; border-top: 1px solid var(--line); }
+.u-grid i:last-child { border-top-color: var(--line-2); }
+.u-ymax { position: absolute; left: 0; top: -17px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.u-cols { position: absolute; inset: 0; display: flex; gap: 6px; }
+.u-col { flex: 1 1 0; min-width: 0; position: relative; display: flex; align-items: flex-end; justify-content: center; border-radius: 6px 6px 0 0; }
+.u-col:hover, .u-col:focus-visible { background: color-mix(in srgb, var(--accent) 9%, transparent); outline-offset: -2px; }
+.u-b { display: block; width: min(24px, 72%); background: var(--accent); border-radius: 4px 4px 0 0; min-height: 2px; }
+.u-val { position: absolute; left: 50%; transform: translateX(-50%); font-size: 11.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; }
+.u-tip { position: absolute; top: -6px; transform: translate(-50%, -100%); background: var(--ink); color: var(--bg); padding: 5px 9px; border-radius: 8px; font-size: 12px; white-space: nowrap; pointer-events: none; z-index: 2; }
+.u-x { display: flex; justify-content: space-between; margin-top: 7px; font-size: 11.5px; color: var(--muted); }
+.u-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.u-table th, .u-table td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: right; font-weight: 400; }
+.u-table th:first-child { text-align: left; font-weight: 500; }
+.u-table thead th { color: var(--muted); font-weight: 600; }
+.u-meters { display: flex; flex-direction: column; gap: 12px; }
+.u-mt { display: flex; justify-content: space-between; gap: 12px; font-size: 13.5px; }
+.u-mt span { color: var(--muted); font-variant-numeric: tabular-nums; }
+.u-bar { height: 8px; background: var(--surface-2); border-radius: 99px; overflow: hidden; margin-top: 5px; }
+.u-bar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+.u-ms { color: var(--muted); font-size: 12px; }
+.u-kv { grid-template-columns: 1fr auto; }
+.u-kv dd { text-align: right; }
+hr.thin { border: 0; border-top: 1px solid var(--line); margin: 2px 0; width: 100%; }
+
+@media (max-width: 720px) {
+  dialog.sheet.settings { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; margin: 0; }
+  .set-shell { grid-template-columns: minmax(0, 1fr); }
+  .set-shell[data-view="list"] .set-main { display: none; }
+  .set-shell[data-view="page"] .set-nav { display: none; }
+  .set-nav { background: var(--bg); border-right: 0; padding: 12px 14px 28px; gap: 8px; }
+  .set-tab { background: var(--surface); box-shadow: 0 0 0 1px var(--line); padding: 13px 14px; border-radius: 14px; gap: 12px; }
+  .set-tab small { display: block; color: var(--muted); font-size: 12.5px; font-weight: 400; }
+  .set-tab .nc { display: block; color: var(--muted); }
+  .set-main .sheet-body { padding: 16px 14px 32px; }
+  .set-ptitle { display: none; }
+  .set-psub { margin-top: 0; }
+  .two { grid-template-columns: 1fr; }
+  .sheet .set-page section, .sheet .set-page section:last-child { padding: 14px; }
+}
+.src-row .sr-main { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 1px 10px; }
+.src-row .sr-more { flex-basis: 100%; margin-top: 0; }
+@media (max-width: 720px) {
+  dialog.sheet.settings .sheet-head { padding: 12px 10px 10px 12px; }
+  dialog.sheet.settings .sheet-head .icon-btn { width: 40px; height: 40px; }
+  dialog.sheet.settings .sheet-head h2 { padding-left: 6px; }
+}
 </style>
 </head>
 <body>
@@ -815,9 +915,12 @@ dialog.legal .row { display: flex; gap: 8px; margin: 6px 0; }
   </main>
 </div>
 
-<dialog class="sheet" id="settings" aria-labelledby="settingsTitle">
-  <div class="sheet-head"><h2 id="settingsTitle">Settings</h2><button class="icon-btn" id="closeSettings" type="button" aria-label="Close settings"></button></div>
-  <div class="sheet-body" id="settingsBody"></div>
+<dialog class="sheet settings" id="settings" aria-labelledby="settingsTitle">
+  <div class="sheet-head"><button class="icon-btn set-back" id="setBack" type="button" aria-label="Back to the settings list" hidden></button><h2 id="settingsTitle">Settings</h2><button class="icon-btn" id="closeSettings" type="button" aria-label="Close settings"></button></div>
+  <div class="set-shell" id="setShell" data-view="list">
+    <nav class="set-nav" id="setNav" aria-label="Settings pages"></nav>
+    <div class="set-main"><div class="sheet-body" id="settingsBody"></div></div>
+  </div>
 </dialog>
 
 <dialog class="sheet wide" id="viewer" aria-labelledby="viewerTitle">
@@ -1085,6 +1188,9 @@ const ICONS = {
   wifioff: '<path d="M3.5 3.5l17 17M8.6 8.9A10 10 0 0 0 3 12M5.8 15.3A6 6 0 0 1 9.5 13M12 19.5h.01M15.4 8.2A10 10 0 0 1 21 12M14.6 12.3a6 6 0 0 1 3.6 3"/>',
   undo: '<path d="M9 7L4.5 11.5 9 16"/><path d="M5 11.5h8.5a5 5 0 0 1 0 10H11"/>',
   film: '<rect x="4" y="5" width="16" height="14" rx="2.5"/><path d="M4 9.5h16M4 14.5h16M8.5 5v14M15.5 5v14"/>',
+  chart: '<path d="M5 20V11M12 20V4M19 20v-6"/>',
+  back: '<path d="M15 5l-7 7 7 7"/>',
+  chevr: '<path d="M9 5l7 7-7 7"/>',
 };
 const icon = (name, size = 18) => `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ''}</svg>`;
 /* set while "Delete all my data" runs, so nothing is saved again before the page restarts */
@@ -1132,7 +1238,7 @@ function downloadFile(name, text, type = 'text/markdown') {
 /* ---------- settings ---------- */
 const DEFAULTS = {
   ver: 4, model: 'Qwen3.5-2B', mode: 'auto', style: 'normal', wiki: 'auto', about: '', name: '', rules: '', city: '',
-  creativity: 'balanced', theme: 'system', autoStart: true, rail: true,
+  creativity: 'balanced', theme: 'system', textSize: 'normal', sendKey: 'enter', breakNudge: false, autoStart: true, rail: true,
   ctxSize: 'large', memory: [], sources: {}, reader: 'ask', webProvider: 'jina', webKey: '', speechRate: 1, speechVoice: '', showNotes: true,
 };
 const S = (() => {
@@ -1149,6 +1255,10 @@ if (!WIKI_MODES[S.wiki]) S.wiki = 'auto';
 if (!CREATIVITY[S.creativity]) S.creativity = 'balanced';
 if (!['small', 'standard', 'large', 'max'].includes(S.ctxSize)) S.ctxSize = 'large';
 if (!['ask', 'allow', 'never'].includes(S.reader)) S.reader = 'ask';
+if (!['small', 'normal', 'large'].includes(S.textSize)) S.textSize = 'normal';
+if (!['enter', 'mod'].includes(S.sendKey)) S.sendKey = 'enter';
+S.breakNudge = S.breakNudge === true;
+S.autoStart = S.autoStart !== false;
 if (!['jina', 'tavily'].includes(S.webProvider)) S.webProvider = 'jina';
 if (!Array.isArray(S.memory)) S.memory = [];
 S.memory = S.memory.filter(m => m && typeof m.text === 'string').slice(0, MEM_MAX);
@@ -1209,6 +1319,10 @@ function applyTheme() {
   else document.documentElement.removeAttribute('data-theme');
 }
 applyTheme();
+/* Text size: scales the answers and your own messages (the buttons and menus keep their size). */
+const TEXT_SCALE = { small: 0.92, normal: 1, large: 1.14 };
+function applyTextSize() { document.documentElement.style.setProperty('--tscale', String(TEXT_SCALE[S.textSize] || 1)); }
+applyTextSize();
 /* The memory size that fits the chosen model, in tokens. */
 const ctxTarget = (m, size = S.ctxSize) => (m.ctxSizes[size] || m.ctxSizes.large);
 
@@ -1386,6 +1500,132 @@ const Net = {
     catch (e) { this.markFail(id, e); this.health[id].until = 0; return false; }
   },
 };
+
+/* ---------- usage: how much Lumen was used (counted on this computer only, never sent anywhere) ----------
+   One small record per day in localStorage ("lumen.usage"): answers, tokens read and written, seconds spent generating,
+   seconds with Lumen open and in use, and the same tokens split by model. Old days are dropped after 400 days. */
+const Usage = (() => {
+  const KEY = 'lumen.usage', MAXDAYS = 400, IDLE_MS = 90e3, TICK_MS = 5000, BREAK_AFTER_S = 45 * 60, BREAK_PAUSE_MS = 5 * 60e3;
+  const num = v => (Number.isFinite(v) && v > 0 ? Math.round(v) : 0);
+  const pad = n => String(n).padStart(2, '0');
+  const dayKey = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const blank = () => ({ a: 0, i: 0, o: 0, g: 0, t: 0, l: 0, m: {}, md: {} });
+  let data = null, dirty = false, saveT = 0, lastAct = Date.now(), timer = null, lastTick = 0, sinceBreak = 0;
+  const session = { start: Date.now(), a: 0, i: 0, o: 0, t: 0 };
+
+  function clean(raw) {
+    const out = { v: 1, since: Number.isFinite(raw?.since) ? raw.since : Date.now(), days: {} };
+    const days = raw && typeof raw.days === 'object' && raw.days ? raw.days : {};
+    for (const [k, d] of Object.entries(days)) {
+      if (!/^\d{4}-\d\d-\d\d$/.test(k) || !d || typeof d !== 'object') continue;
+      const r = blank();
+      for (const f of ['a', 'i', 'o', 'g', 't', 'l']) r[f] = num(d[f]);
+      for (const [mk, mv] of Object.entries(d.m && typeof d.m === 'object' ? d.m : {})) if (/^[\w.\-]{1,40}$/.test(mk) && mv && (num(mv.i) || num(mv.o))) r.m[mk] = { i: num(mv.i), o: num(mv.o) };
+      for (const [mk, mv] of Object.entries(d.md && typeof d.md === 'object' ? d.md : {})) if (/^[a-z]{2,12}$/.test(mk) && num(mv)) r.md[mk] = num(mv);
+      out.days[k] = r;
+    }
+    return out;
+  }
+  function load() {
+    if (data) return data;
+    let raw = null;
+    try { raw = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch {}
+    data = clean(raw);
+    return data;
+  }
+  function save(force) {
+    if (erasing || !data) return;
+    if (!dirty && !force) return;
+    const keys = Object.keys(data.days).sort();
+    while (keys.length > MAXDAYS) delete data.days[keys.shift()];
+    try { localStorage.setItem(KEY, JSON.stringify(data)); dirty = false; saveT = Date.now(); } catch {}
+  }
+  const maybeSave = () => { if (Date.now() - saveT > 20e3) save(); };
+  function today() { const d = load(); const k = dayKey(); return d.days[k] || (d.days[k] = blank()); }
+  const touch = () => { dirty = true; };
+
+  /* One finished call to the AI model. `usage` is what the engine reported (may be missing; then it is estimated). */
+  function addCall({ model, usage, text, messages, ms, lab }) {
+    if (erasing) return;
+    const i = num(usage?.prompt_tokens) || (messages || []).reduce((n, m) => n + estTokens(typeof m.content === 'string' ? m.content : ''), 0);
+    const o = num(usage?.completion_tokens) || estTokens(text || '');
+    const d = today();
+    d.i += i; d.o += o; d.g += num(ms);
+    if (lab) d.l += i + o;
+    const key = typeof model === 'string' && /^[\w.\-]{1,40}$/.test(model) ? model : 'other';
+    const m = d.m[key] || (d.m[key] = { i: 0, o: 0 }); m.i += i; m.o += o;
+    session.i += i; session.o += o;
+    touch(); maybeSave();
+  }
+  /* One answer that finished. */
+  function addAnswer(mode) {
+    if (erasing) return;
+    const d = today(); d.a += 1; session.a += 1;
+    const k = /^[a-z]{2,12}$/.test(mode || '') ? mode : 'auto';
+    d.md[k] = (d.md[k] || 0) + 1;
+    touch(); maybeSave();
+  }
+  /* Time with Lumen open, visible and in use (a click, a key press or an answer being written within the last 90 seconds). */
+  function tick(ms = TICK_MS, force) {
+    if (erasing) return;
+    const active = force || (document.visibilityState === 'visible' && (Date.now() - lastAct < IDLE_MS || !!App.run));
+    if (!active) return;
+    const s = Math.round(ms / 1000), now = Date.now();
+    today().t += s; session.t += s;
+    touch(); maybeSave();
+    // optional break reminder: after 45 minutes of use without a pause of 5 minutes or more
+    if (lastTick && now - lastTick > BREAK_PAUSE_MS) sinceBreak = 0;
+    lastTick = now; sinceBreak += s;
+    if (S.breakNudge && sinceBreak >= BREAK_AFTER_S) { sinceBreak = 0; try { toast('You have been learning for 45 minutes. A short break helps you remember more.', null, 9000); } catch {} }
+  }
+  function start() {
+    load();
+    const act = () => { lastAct = Date.now(); };
+    for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart']) window.addEventListener(ev, act, { passive: true, capture: true });
+    timer ||= setInterval(() => tick(), TICK_MS);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) save(); else lastAct = Date.now(); });
+    window.addEventListener('pagehide', () => save());
+  }
+
+  /* ----- reading it back ----- */
+  const sum = days => days.reduce((s, d) => { for (const f of ['a', 'i', 'o', 'g', 't', 'l']) s[f] += d[f] || 0; return s; }, blank());
+  function range(n) {   // n = 1 (today), 7, 30, or 0 for all time
+    const d = load(), now = new Date(), keys = [];
+    if (!n) return Object.entries(d.days).map(([k, v]) => ({ k, ...v }));
+    for (let x = 0; x < n; x++) { const dt = new Date(now.getFullYear(), now.getMonth(), now.getDate() - x); keys.push(dayKey(dt)); }
+    return keys.filter(k => d.days[k]).map(k => ({ k, ...d.days[k] }));
+  }
+  function totals(n) {
+    const rows = range(n), t = sum(rows);
+    const models = {};
+    for (const r of rows) for (const [k, v] of Object.entries(r.m)) { const m = models[k] || (models[k] = { i: 0, o: 0 }); m.i += v.i; m.o += v.o; }
+    const modes = {};
+    for (const r of rows) for (const [k, v] of Object.entries(r.md)) modes[k] = (modes[k] || 0) + v;
+    return { ...t, models, modes, days: rows.filter(r => r.a || r.i || r.o || r.t).length, tps: t.g > 0 && t.o > 0 ? t.o / (t.g / 1000) : 0 };
+  }
+  /* the last n days, oldest first, one entry per calendar day (zero when nothing happened) */
+  function series(n) {
+    const d = load(), now = new Date(), out = [];
+    for (let x = n - 1; x >= 0; x--) {
+      const dt = new Date(now.getFullYear(), now.getMonth(), now.getDate() - x), k = dayKey(dt), r = d.days[k] || blank();
+      out.push({ k, date: dt, tokens: r.i + r.o, answers: r.a, minutes: Math.round(r.t / 6) / 10 });
+    }
+    return out;
+  }
+  function streak() {   // days in a row (ending today, or yesterday if nothing yet today) with any use
+    const d = load(); let n = 0; const now = new Date();
+    for (let x = 0; x < 400; x++) {
+      const r = d.days[dayKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - x))];
+      if (r && (r.a || r.t >= 30)) n++; else if (x > 0) break;
+    }
+    return n;
+  }
+  function reset() { data = clean(null); dirty = true; session.a = session.i = session.o = session.t = 0; save(true); }
+  const since = () => load().since;
+  return { start, addCall, addAnswer, tick, totals, series, streak, reset, since, session, save, dayKey, _data: () => load(), _setAct: t => { lastAct = t; } };
+})();
+const fmtNum = n => (n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + 'M' : n >= 1e4 ? Math.round(n / 1e3) + 'K' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(Math.round(n))).replace('.0K', 'K').replace('.0M', 'M');
+const fmtDur = s => { s = Math.round(s); if (s < 60) return s + ' s'; const m = Math.round(s / 60); if (m < 60) return m + ' min'; const h = Math.floor(m / 60), r = m % 60; return r ? `${h} h ${r} min` : `${h} h`; };
 
 /* ---------- the AI engine ---------- */
 const Brain = {
@@ -1648,6 +1888,7 @@ const Brain = {
       };
       if (Number.isInteger(seed)) req.seed = seed;
       if (json) req.response_format = { type: 'json_object', schema: typeof json === 'string' ? json : JSON.stringify(json) };
+      const t0 = performance.now();
       const stream = await this.engine.chat.completions.create(req);
       let text = '', usage = null, finish = null;
       for await (const chunk of stream) {
@@ -1657,6 +1898,7 @@ const Brain = {
         if (choice?.finish_reason) finish = choice.finish_reason;
         if (chunk.usage) usage = chunk.usage;
       }
+      if (max_tokens !== 1) try { Usage.addCall({ model: this.loadedKey, usage, text, messages, ms: performance.now() - t0, lab: typeof Lab !== 'undefined' && !!Lab.isBusy?.() }); } catch {}   // counted on this computer only (the 1-token warm-up after loading is not counted)
       return { text, usage, finish };
     } finally { this.busy = false; }
   },
@@ -6296,7 +6538,7 @@ async function endRun(run, t0) {
   await saveChat(chat);
   if (chat.id === App.currentId) { const n = nodeFor(am); if (n) fillAssistant(n, am, chat); else renderThread(); }
   renderSidebar(); updateComposer(); updateMeter();
-  if (am.state === 'done') scheduleSummary(chat);
+  if (am.state === 'done') { try { Usage.addAnswer(am.mode); } catch {} scheduleSummary(chat); }
 }
 
 /* Should the files attached to this chat be used for this question? */
@@ -7340,12 +7582,12 @@ function updateComposer() {
   els.send.classList.toggle('stop', busy);
   els.send.innerHTML = busy ? icon('stop', 18) : icon('up', 18);
   els.send.setAttribute('aria-label', busy ? 'Stop' : 'Send');
-  els.send.title = busy ? 'Stop (Esc)' : 'Send (Enter)';
+  els.send.title = busy ? 'Stop (Esc)' : 'Send (' + (S.sendKey === 'mod' ? MOD + ' + Enter' : 'Enter') + ')';
   Dictation.sync();
   const loading = App.pending.some(d => d.loading);
   els.send.disabled = !busy && ((!els.input.value.trim() && !App.pending.filter(d => !d.loading).length) || loading || Brain.state === 'unsupported');
   els.input.placeholder = Brain.state === 'unsupported' ? 'This browser can’t run the AI model'
-    : App.pending.length ? 'What should Lumen do with the file? (or just press Enter to summarize)'
+    : App.pending.length ? 'What should Lumen do with the file? (or just send it to get a summary)'
     : (current()?.messages.length ? 'Reply to Lumen…' : 'How can I help you learn today?  Type / for commands');
 }
 /* The memory meter: how much of the AI's short-term memory the next message would use. */
@@ -7364,7 +7606,10 @@ function updateMeter() {
 els.input.addEventListener('input', () => { autoGrow(); updateComposer(); updateMeter(); updateSlash(); });
 els.input.addEventListener('keydown', e => {
   if (handleSlashKey(e)) return;
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (!App.run) submitComposer(); }
+  if (e.key === 'Enter' && !e.isComposing) {
+    const send = S.sendKey === 'mod' ? (e.ctrlKey || e.metaKey) : !e.shiftKey;   // "Send with": Enter, or Ctrl/⌘ + Enter (then Enter makes a new line)
+    if (send) { e.preventDefault(); if (!App.run) submitComposer(); }
+  }
 });
 els.input.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== els.input && !els.slashMenu.contains(document.activeElement)) hideSlash(); }, 120));
 els.composer.addEventListener('submit', e => { e.preventDefault(); if (App.run) stopRun(); else submitComposer(); });
@@ -8323,13 +8568,13 @@ const LEGAL_PAGES = {
     lh('Your chats stay on your device'),
     lp('The AI model runs inside your browser. Your messages and Lumen’s answers are not sent to me or to any AI company. I cannot see, read or get them back.'),
     lh('What is saved on your device'),
-    lul(['Your chats, in the browser’s database (IndexedDB).', 'Your settings, memory and learned habits (localStorage).', 'Notes from look-ups, and files you added, as short saved text (IndexedDB).',
+    lul(['Your chats, in the browser’s database (IndexedDB).', 'Your settings, memory and learned habits (localStorage).', 'Usage numbers: how many answers and tokens, and how long Lumen was open and in use, one small line per day (localStorage). They hold no text from your chats.', 'Notes from look-ups, and files you added, as short saved text (IndexedDB).',
       'The offline Wikipedia copy, only if you add one (IndexedDB).', 'The AI model files and a copy of this page so it opens without internet (browser storage).']),
     lp('Lumen needs this to work the way you asked, so there is no cookie banner. Lumen uses no tracking, no analytics, no ads and no accounts.'),
     h('div', { class: 'row' }, h('button', { class: 'btn', type: 'button', text: 'Delete all my data…', onclick: () => { closeLegal(); openSettings('storage'); } })),
-    lp('You can delete everything at any time in Settings → Storage and chats → “Delete all my data”, or by clearing this site’s data in your browser.'),
+    lp('You can delete everything at any time in Settings → Data and privacy → “Delete all my data”, or by clearing this site’s data in your browser.'),
     lh('What Lumen sends out'),
-    lp('Your questions are answered on your device. Only short messages go out, and only when Lumen needs a look-up. You can switch every source off in Settings → Look things up.'),
+    lp('Your questions are answered on your device. Only short messages go out, and only when Lumen needs a look-up. You can switch every source off in Settings → Look-ups.'),
     h('div', { class: 'priv' }, ...privacyRows().map(([a, b]) => h('div', { class: 'pv-row' }, h('b', { text: a }), h('span', { text: b })))),
     lp('Never sent: your chats, files, memory, saved notes, name, rules or settings.'),
     lh('Other companies that see your connection'),
@@ -8596,7 +8841,8 @@ function sourceRows(container) {
     const sw = def.id === 'reader' ? null : toggle(def.name, Net.enabled(def.id) && (def.id !== 'web' || !!(S.webKey || '').trim()), on => { S.sources[def.id] = on; saveSettings(); sourceRows(container); }, def.id === 'web' && !(S.webKey || '').trim());
     container.append(h('div', { class: 'src-row' },
       h('span', { class: 'dot ' + st.cls }),
-      h('div', { class: 'sr-main' }, h('b', { text: def.name }), h('span', { class: 'sr-what', text: def.what }), h('span', { class: 'sr-sends', text: 'Sends: ' + def.sends }), h('span', { class: 'sr-state', text: st.text })),
+      h('div', { class: 'sr-main' }, h('b', { text: def.name }), h('span', { class: 'sr-state', text: st.text }),
+        h('details', { class: 'sr-more' }, h('summary', { text: 'Details' }), h('span', { class: 'sr-what', text: def.what }), h('span', { class: 'sr-sends', text: 'Sends: ' + def.sends }))),
       sw));
   }
 }
@@ -8611,30 +8857,31 @@ async function checkConnections(btn, container) {
 
 function openSettings(focus) {
   closeMenu();
-  const b = els.settingsBody; b.replaceChildren();
+  const b = h('div');   // the sections are collected here first, then put on their pages (see buildSettings)
   const sec = (id, title, ...kids) => h('section', { id: 'set-' + id }, h('h3', { text: title }), ...kids);
   const hint = t => h('p', { class: 'hint', text: t });
+  const more = (...kids) => h('details', { class: 'more' }, h('summary', { text: 'More' }), ...kids.map(k => typeof k === 'string' ? h('p', { class: 'hint', text: k }) : k));
   const field = (id, label, el) => h('label', { class: 'field', for: id }, h('span', { class: 'lbl', text: label }), el);
 
   // AI model + memory size
   settingsModelsEl = h('div', { class: 'model-opts', role: 'radiogroup', 'aria-label': 'AI model' });
-  b.append(sec('models', 'AI model', hint('Bigger models answer better but are slower and need more memory. Each model is downloaded once and saved in this browser.'), settingsModelsEl));
+  b.append(sec('models', 'AI model', hint('Bigger models answer better but are slower and use more memory. Each one is downloaded once.'), settingsModelsEl));
   renderSettingsModels();
   Brain.refreshCached();
   const m0 = Brain.model(S.model);
   const sizeInfo = h('p', { class: 'hint' });
   const paintSize = () => { sizeInfo.textContent = Brain.state === 'ready' ? `Running now with room for about ${Math.round(Brain.ctx * 0.75 / 100) * 100 >= 1000 ? (Math.round(Brain.ctx * 0.75 / 1000)) + ',000' : Brain.ctx} words at once (${Brain.ctx.toLocaleString('en-US')} tokens).` : 'Applies the next time the model starts.'; };
   paintSize();
-  b.append(sec('ctx', 'Memory size', hint('How much Lumen can keep in mind at once: long chats, files and the notes it looks up. A bigger memory uses more graphics memory. If your graphics chip cannot hold the size you choose, Lumen quietly uses a smaller one.'),
+  b.append(sec('ctx', 'Working memory', hint('How much Lumen keeps in mind at once: your chat, files and notes. Bigger uses more graphics memory.'), more('If your graphics chip cannot hold the size you choose, Lumen quietly uses a smaller one.'),
     h('div', { class: 'opt-row' }, seg('Memory size', [['small', `Small · ${m0.ctxSizes.small / 1024}K`], ['standard', `Standard · ${m0.ctxSizes.standard / 1024}K`], ['large', `Large · ${m0.ctxSizes.large / 1024}K`], ['max', `Maximum · ${m0.ctxSizes.max / 1024}K`]], S.ctxSize, v => { S.ctxSize = v; saveSettings(); applyMemorySize(); setTimeout(paintSize, 400); updateMeter(); })),
     sizeInfo));
 
   // Battery saver
   const saverRow = (key, label, desc, disabled) => h('div', { class: 'lrn-switch' }, h('div', { class: 'lt' }, h('b', { text: label }), h('span', { text: desc })),
     toggle(label, Saver.cfg()[key], v => { if (key === 'on') Saver.setOn(v); else { Saver.cfg().auto = v; saveSettings(); Saver.paint(); } }, disabled));
-  b.append(sec('saver', 'Battery saver', hint('Less heat and battery use. When it is on, answers are shorter, Lumen keeps less in mind, and it does no background AI work (no looking up of better search words, no chat summaries). A badge at the top shows while it is on, so you always know.'),
+  b.append(sec('saver', 'Battery saver', hint('Less heat and battery use. Answers are shorter and Lumen does no background AI work.'), more('Lumen also keeps less in mind, and skips better search words and chat summaries. A badge at the top shows while it is on.'),
     saverRow('on', 'Battery saver', 'Turn it on now.'),
-    saverRow('auto', 'Turn on by itself when the battery is low', Saver.supported() ? 'Below 30% and not charging. Lumen tells you when it does this.' : 'Your browser cannot report the battery level (Safari and Firefox cannot), so this does nothing here.', !Saver.supported())));
+    saverRow('auto', 'Turn on when the battery is low', Saver.supported() ? 'At 30% or less and not charging.' : 'This browser cannot report the battery level, so this does nothing here.', !Saver.supported())));
 
   // How Lumen is told to answer: prompt versions and example answers
   const pvRows = Object.entries(PROMPT_VERSIONS).map(([k, v]) => {
@@ -8664,16 +8911,16 @@ function openSettings(focus) {
   };
   for (const e of Examples.all()) exList.append(exItem(e));
   paintEx();
-  b.append(sec('prompt', 'How Lumen is told to answer', hint('The base instructions come in versions that each change one thing. The Test lab (type /lab) can score two versions on the same questions so you can keep the better one. Your choice here applies to new answers at once.'), ...pvRows));
-  b.append(sec('examples', 'Example answers', hint('Twenty model answers (explain, compare, how-to, both sides, and “I don’t know”) show the style you like: simple words, own words, one example. Lumen shows the AI the 2 or 3 most similar ones as earlier turns, in under 600 tokens. Read a few and approve them, or rewrite them in your own style. Only approved examples are used. Their facts are checked, but the AI can still copy their wording; Lumen warns you when an answer repeats 8 words in a row from one.'),
+  b.append(sec('prompt', 'Base instructions', hint('Pick the version of the instructions Lumen follows. It applies to new answers at once.'), more('Each version changes one thing. The Test lab can score two versions on the same questions so you can keep the better one.'), ...pvRows));
+  b.append(sec('examples', 'Example answers', hint('Twenty model answers that show the style you like. Approve or rewrite them. Only approved ones are used.'), more('Lumen shows the AI the 2 or 3 most similar examples with each question, in under 600 tokens. Their facts are checked, but the AI can still copy their wording. Lumen warns you when an answer repeats 8 words in a row from one.'),
     h('div', { class: 'lrn-switch' }, h('div', { class: 'lt' }, h('b', { text: 'Use example answers' }), h('span', { text: 'Adds up to 600 tokens to each question.' })), exSw), exStatus, exList));
 
   // Test lab
-  b.append(sec('lab', 'Test lab', hint('Numbers instead of guesses: compare models, check that a change did not make answers worse, compare prompts and example answers, and measure speed. Everything runs on this computer.'),
+  b.append(sec('lab', 'Test lab', hint('Compare models, prompts and example answers with real numbers. Everything runs on this computer.'),
     h('div', { class: 'row' }, h('button', { class: 'btn', type: 'button', html: `${icon('layers', 15)}<span>Open the Test lab</span>`, onclick: () => { els.settings.close(); openLab(); } }))));
 
   // Hard questions: voting
-  b.append(sec('vote', 'Hard questions: three tries', hint('For puzzles, math and logic questions with a short answer (a number, a choice, yes or no), Deep mode can answer three times and show the answer that most tries agree on. If all three differ, Lumen says it is not sure. It makes these answers about 2 to 3 times slower and it is never used for essays or opinions. Turn it on only if the Test lab (type /lab) shows that it helps with your model. You can also use it once with /vote.'),
+  b.append(sec('vote', 'Three tries for hard questions', hint('In Deep mode, short puzzles and math questions are answered three times. Lumen shows the answer most tries agree on.'), more('If all three differ, Lumen says it is not sure. It makes these answers 2 to 3 times slower and is never used for essays or opinions. Turn it on only if the Test lab shows it helps. You can also use it once with /vote.'),
     h('div', { class: 'lrn-switch' }, h('div', { class: 'lt' }, h('b', { text: 'Vote on hard questions' }), h('span', { text: 'Only in Deep mode, only for short checkable answers.' })),
       toggle('Vote on hard questions', S.vote.on, v => { S.vote.on = v; saveSettings(); }))));
 
@@ -8687,8 +8934,8 @@ function openSettings(focus) {
   const cityIn = h('input', { id: 'yourCity', type: 'text', placeholder: 'Example: Ljubljana', maxlength: '60' });
   cityIn.value = S.city || '';
   cityIn.addEventListener('input', () => { S.city = cityIn.value; saveSettings(); });
-  b.append(sec('about', 'About you', hint('Optional. Lumen uses this to greet you and to pitch answers at your level. It stays on this computer.'),
-    field('yourName', 'Name', nameIn), field('yourCity', 'Your city (for weather and time when you do not name a place)', cityIn), field('aboutYou', 'What should Lumen know about you?', about)));
+  b.append(sec('about', 'Profile', hint('Optional. Lumen uses this to greet you and to answer at your level. It stays on this computer.'),
+    h('div', { class: 'two' }, field('yourName', 'Name', nameIn), field('yourCity', 'City (for weather and time)', cityIn)), field('aboutYou', 'What should Lumen know about you?', about)));
 
   // Learning
   const learnStatus = h('p', { class: 'hint', id: 'learnStatus' });
@@ -8698,14 +8945,15 @@ function openSettings(focus) {
   learnUnsub?.(); learnUnsub = Learn.on(() => { if (els.settings.open) learnPaint(); });
   const lrow = (key, label, desc) => h('div', { class: 'lrn-switch' }, h('div', { class: 'lt' }, h('b', { text: label }), h('span', { text: desc })),
     toggle(label, S.learn[key], v => { S.learn[key] = v; saveSettings(); Learn.notify(); }));
-  b.append(sec('learn', 'Keeps learning',
-    hint('The AI model itself cannot be retrained inside a web page. Instead Lumen keeps notes on this computer and gives the right ones to the model with every question. That is how it gets smarter every day. Everything stays in this browser.'),
-    lrow('auto', 'Remember what I tell it', 'Facts about you (“I have an iPhone 17”) and names you teach it (“Jimmy Donaldson is Mr. Beast”). A new fact replaces an old one about the same thing.'),
-    lrow('topics', 'Learn from my questions', 'Notices the topics you ask about and how you like answers: simple, short, detailed or with examples. Also remembers which meaning you choose when a name has several (like “Mr Beast”).'),
-    lrow('core', 'Use the built-in facts', `About ${Math.floor(Core.count() / 10) * 10} short facts ship inside Lumen (world leaders, science, history, geography, sports, big events, Slovenia). They work without internet and were checked in ${Core.checked()}. Lumen finds the ones that fit your question and gives them to the model.`),
-    lrow('library', 'Save what it looks up', 'Keeps short notes from Wikipedia, so the next question about it is faster and also works without internet.'),
-    lrow('daily', 'Read a little of the internet every day', 'Wikipedia’s news and the 8 most-read articles become saved notes, and older notes you used are read again to stay fresh. It runs about once a day, only while Lumen is open.'),
-    lrow('dailyTopics', 'Include my favorite topics', 'Also reads more about topics you often ask about, and tries again for things it could not find before. Only those words are sent, the same words you already searched.'),
+  b.append(sec('learn', 'Learning',
+    hint('Lumen cannot retrain its AI model in a web page. Instead it keeps notes on this computer and gives the right ones to the model with each question.'),
+    lrow('auto', 'Remember what I tell it', 'Facts about you and names you teach it.'),
+    lrow('topics', 'Learn from my questions', 'Notices your topics and how you like answers.'),
+    lrow('core', 'Use the built-in facts', `About ${Math.floor(Core.count() / 10) * 10} short facts inside Lumen. They work without internet.`),
+    lrow('library', 'Save what it looks up', 'Short Wikipedia notes, so repeat questions are faster and work offline.'),
+    lrow('daily', 'Read a little every day', 'Wikipedia’s news and top articles become saved notes. About once a day, only while Lumen is open.'),
+    lrow('dailyTopics', 'Include my favorite topics', 'Also reads about topics you ask about often. Only words you already searched are sent.'),
+    more(`The built-in facts cover world leaders, science, history, geography, sports, big events and Slovenia, and were checked in ${Core.checked()}. A new fact about something replaces the old one. Lumen also remembers which meaning you pick when a name has several.`),
     learnStatus,
     h('div', { class: 'opt-row' }, learnNow, h('button', { class: 'btn', type: 'button', text: 'See what Lumen has learned', onclick: () => Learn.showLearned() })),
     h('div', { class: 'opt-row' },
@@ -8727,31 +8975,35 @@ function openSettings(focus) {
   const memIn = h('input', { id: 'memNew', type: 'text', placeholder: 'Example: My exam is on 12 June', maxlength: '200' });
   const memAdd = () => { if (memIn.value.trim() && addMemory(memIn.value)) { memIn.value = ''; paintMem(); } };
   memIn.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); memAdd(); } });
-  b.append(sec('memory', 'What Lumen remembers about you', hint(`Short facts about you and names you taught Lumen. Lumen adds the ones that fit to its answers. It saves them by itself when you say things like “I have an iPhone 17” or “Jimmy Donaldson is Mr. Beast” (see Keeps learning). You can also type /remember in the chat. Up to ${MEM_MAX} facts, saved on this computer only.`),
+  b.append(sec('memory', 'What Lumen remembers', hint(`Short facts about you. Lumen adds the ones that fit to its answers. Up to ${MEM_MAX} facts, saved on this computer only.`), more('Lumen saves facts by itself when you say things like “I have an iPhone 17” (see Keeps learning). You can also type /remember in the chat.'),
     memList, h('div', { class: 'opt-row grow-row' }, memIn, h('button', { class: 'btn', type: 'button', text: 'Add', onclick: memAdd }), S.memory.length ? armedButton('Forget all', 'Click again to forget all', () => { S.memory = []; saveSettings(); Learn.notify(); paintMem(); }) : null)));
   const rules = h('textarea', { id: 'rules', placeholder: 'Example: Always give a short summary first. Use metric units. Do not use bullet points unless I ask.' });
   rules.value = S.rules || '';
   rules.addEventListener('input', () => { S.rules = rules.value; saveSettings(); });
-  b.append(sec('rules', 'Your rules', hint('How Lumen should always answer you. These are added to every message.'), rules));
+  b.append(sec('rules', 'Your rules', hint('How Lumen should always answer you. Added to every message.'), rules));
 
   // Answers and look-ups
-  b.append(sec('answers', 'Answers', hint('Creativity changes how varied the answers are. Precise is best for math and facts.'),
-    h('div', { class: 'opt-row' }, seg('Creativity', [['precise', 'Precise'], ['balanced', 'Balanced'], ['creative', 'Creative']], S.creativity, v => { S.creativity = v; saveSettings(); }))));
+  const row = (label, desc, control) => h('div', { class: 'set-row' }, h('div', { class: 'lt' }, h('b', { text: label }), desc ? h('span', { text: desc }) : null), control);
+  b.append(sec('answers', 'Answers',
+    row('Thinking', 'How much Lumen thinks before it answers.', seg('Thinking', Object.values(MODES).map(m => [m.key, m.label]), S.mode, v => { S.mode = v; saveSettings(); renderPills(); })),
+    row('Style', 'How answers are written.', seg('Answer style', Object.entries(STYLES).map(([k, v]) => [k, v.label]), S.style, v => { S.style = v; saveSettings(); renderPills(); })),
+    row('Creativity', 'Precise is best for math and facts.', seg('Creativity', [['precise', 'Precise'], ['balanced', 'Balanced'], ['creative', 'Creative']], S.creativity, v => { S.creativity = v; saveSettings(); }))));
   const srcBox = h('div', { class: 'src-list' });
   sourceRows(srcBox);
   const checkBtn = h('button', { class: 'btn', type: 'button', html: `${icon('refresh', 15)}<span>Check connections</span>`, onclick: () => checkConnections(checkBtn, srcBox) });
   const keyIn = h('input', { id: 'webKey', type: 'password', placeholder: 'Paste your key here', autocomplete: 'off', spellcheck: 'false' });
   keyIn.value = S.webKey || '';
   keyIn.addEventListener('input', () => { S.webKey = keyIn.value.trim(); saveSettings(); sourceRows(srcBox); });
-  b.append(sec('sources', 'Look things up', hint('Small models forget facts, so Lumen looks things up, reads the best parts, and explains them in its own words with numbered sources. Only short search words are sent. Your chats, files and memory never are.'),
-    h('div', { class: 'opt-row' }, seg('Look things up', [['auto', 'Auto'], ['always', 'Always'], ['off', 'Off']], S.wiki, v => { S.wiki = v; saveSettings(); renderPills(); })), srcBox, h('div', { class: 'opt-row' }, checkBtn),
+  b.append(sec('sources', 'Look things up', hint('Small models forget facts, so Lumen looks them up and explains them in its own words, with sources. Only short search words are sent. Your chats, files and memory never are.'),
+    row('When to look things up', null, seg('Look things up', [['auto', 'Auto'], ['always', 'Always'], ['off', 'Off']], S.wiki, v => { S.wiki = v; saveSettings(); renderPills(); })), srcBox, h('div', { class: 'opt-row' }, checkBtn)));
+  b.append(sec('web', 'Web search and web pages',
     h('h4', { text: 'Web search (optional)' }),
-    hint('Add a free key to let Lumen search the whole web for fresh answers. Without one, Lumen uses Wikipedia, news feeds and the sources above. The key is saved only in this browser.'),
+    hint('Add a free key to search the whole web for fresh answers. The key is saved only in this browser.'),
     h('div', { class: 'opt-row' }, seg('Web search service', [['jina', 'Jina'], ['tavily', 'Tavily']], S.webProvider, v => { S.webProvider = v; saveSettings(); sourceRows(srcBox); })),
     field('webKey', 'API key', keyIn),
-    h('p', { class: 'hint', html: 'Free keys: <a href="https://jina.ai" target="_blank" rel="noopener noreferrer">jina.ai</a> or <a href="https://tavily.com" target="_blank" rel="noopener noreferrer">tavily.com</a>. This part is experimental because those services can change.' }),
+    h('p', { class: 'hint', html: 'Free keys: <a href="https://jina.ai" target="_blank" rel="noopener noreferrer">jina.ai</a> or <a href="https://tavily.com" target="_blank" rel="noopener noreferrer">tavily.com</a>. Experimental, because those services can change.' }),
     h('h4', { text: 'Reading web pages' }),
-    hint('When you paste a link, Lumen can read the page. To do that it sends the link to r.jina.ai, so Lumen asks first.'),
+    hint('To read a link you paste, Lumen sends the link to r.jina.ai. That is why it asks first.'),
     h('div', { class: 'opt-row' }, seg('Reading web pages', [['ask', 'Ask me'], ['allow', 'Always allow'], ['never', 'Never']], S.reader, v => { S.reader = v; saveSettings(); sourceRows(srcBox); }))));
 
   // Offline Wikipedia
@@ -8838,7 +9090,7 @@ function openSettings(focus) {
     hint('Want to check the script first? Type python3 build_wiki_pack.py --selftest. It needs no internet. For a bigger pack from the full English Wikipedia (23 GB download, several hours), add --max-articles 100000. The README has the details.'),
     hint('What is in the pack: the title and the opening part of each article, as plain words. There are no pictures, tables or lists. It is a snapshot, so recent changes are missing, and Lumen says which date the copy is from.'),
     hint('Memory and disk: searching uses almost no memory (about 2 bytes per article) because the search index stays on disk. Importing needs extra memory and a busy computer for a few minutes. The pack takes about two to three times the size of the file on disk.'));
-  b.append(sec('wikipack', 'Offline Wikipedia (works without internet)', hint('A copy of Wikipedia’s articles, kept on this computer. Lumen searches it first, so many answers need no internet and no look-up leaves this computer. Lumen never downloads Wikipedia by itself: you make one file with a small script, then import it here.'), packBox, packFile, how));
+  b.append(sec('wikipack', 'Offline Wikipedia', hint('A copy of Wikipedia kept on this computer. Many answers then need no internet. Lumen never downloads Wikipedia by itself: you make one file with a small script and import it here.'), packBox, packFile, how));
 
   // Voice
   const voiceSel = h('select', { id: 'voiceSel', 'aria-label': 'Voice' });
@@ -8850,7 +9102,7 @@ function openSettings(focus) {
   };
   if (Speech.supported) { fillVoices(); speechSynthesis.addEventListener?.('voiceschanged', fillVoices, { once: true }); }
   voiceSel.addEventListener('change', () => { S.speechVoice = voiceSel.value; saveSettings(); });
-  b.append(sec('voice', 'Read aloud', hint(Speech.supported ? 'The speaker button under an answer reads it aloud with a voice from your computer. Nothing is sent anywhere.' : 'This browser cannot read text aloud.'),
+  b.append(sec('voice', 'Read aloud', hint(Speech.supported ? 'The speaker button under an answer reads it aloud with a voice from your computer.' : 'This browser cannot read text aloud.'),
     Speech.supported ? h('div', { class: 'opt-row' }, seg('Speed', [[0.85, 'Slow'], [1, 'Normal'], [1.25, 'Fast']], +S.speechRate || 1, v => { S.speechRate = v; saveSettings(); }), voiceSel,
       h('button', { class: 'btn', type: 'button', text: 'Test', onclick: () => { Speech.stop(); const u = new SpeechSynthesisUtterance('Hello! This is how I sound.'); const v = Speech.voice(); if (v) u.voice = v; u.rate = +S.speechRate || 1; speechSynthesis.speak(u); } })) : null));
 
@@ -8890,15 +9142,19 @@ function openSettings(focus) {
     const pd = document.getElementById('privDict'); if (pd) pd.textContent = privDictText();
   };
   paintDict();
-  b.append(sec('dictate', 'Dictation (speak instead of type)', hint('Off by default. When it is on, a microphone button appears next to Send. What you say is typed into the message box so you can fix it first. Nothing is sent until you press Send. While it listens it uses a little more battery.'), dictBox));
+  b.append(sec('dictate', 'Dictation', hint('Speak instead of type. Off by default. A microphone button then appears next to Send, and your words land in the message box so you can fix them first. Nothing is sent until you press Send.'), dictBox));
 
-  b.append(sec('look', 'Appearance', h('div', { class: 'opt-row' }, seg('Theme', [['system', 'Match computer'], ['light', 'Light'], ['dark', 'Dark']], S.theme, v => { S.theme = v; saveSettings(); applyTheme(); }))));
+  b.append(sec('look', 'Appearance',
+    row('Theme', null, seg('Theme', [['system', 'Match computer'], ['light', 'Light'], ['dark', 'Dark']], S.theme, v => { S.theme = v; saveSettings(); applyTheme(); })),
+    row('Text size', 'For answers and your messages.', seg('Text size', [['small', 'Small'], ['normal', 'Normal'], ['large', 'Large']], S.textSize, v => { S.textSize = v; saveSettings(); applyTextSize(); })),
+    row('Send with', S.sendKey === 'mod' ? 'Enter makes a new line.' : 'Shift + Enter makes a new line.', seg('Send with', [['enter', 'Enter'], ['mod', MOD + ' + Enter']], S.sendKey, v => { S.sendKey = v; saveSettings(); paintSendRow(); }))));
+  const paintSendRow = () => { const r = $('#set-look .set-row:last-child .lt span', b); if (r) r.textContent = S.sendKey === 'mod' ? 'Enter makes a new line.' : 'Shift + Enter makes a new line.'; };
 
   // Storage
   storageEl = h('dl', { class: 'kv' });
   const imp = h('input', { type: 'file', accept: '.json,application/json', hidden: true });
   imp.addEventListener('change', () => { if (imp.files[0]) importBackup(imp.files[0]); imp.value = ''; });
-  b.append(sec('storage', 'Storage and chats', storageEl,
+  b.append(sec('storage', 'Your data', storageEl,
     h('div', { class: 'opt-row' },
       h('button', { class: 'btn', type: 'button', html: `${icon('download', 15)}<span>Save a backup</span>`, onclick: exportAll }),
       h('button', { class: 'btn', type: 'button', html: `${icon('upload', 15)}<span>Restore a backup</span>`, onclick: () => imp.click() }), imp,
@@ -8907,7 +9163,7 @@ function openSettings(focus) {
         stopRun(); const all = App.chats; App.chats = []; for (const c of all) await Store.del(c.id); newChat(); toast('All chats were deleted.');
       })),
     h('div', { class: 'opt-row' }, armedButton('Delete all my data', 'Click again: delete everything and restart', async () => { toast('Deleting everything…'); await eraseEverything(); })),
-    hint('“Delete all my data” removes everything Lumen saved in this browser: chats, memory, notes, settings, the offline Wikipedia copy and the AI model files. The page then restarts as new. Nothing is kept anywhere else, because nothing was ever sent to me.')));
+    hint('“Delete all my data” removes everything Lumen saved in this browser: chats, memory, notes, usage numbers, settings, the offline Wikipedia copy and the AI model files. Then Lumen restarts as new. Nothing is kept anywhere else.')));
   renderStorage();
 
   // This computer
@@ -8923,26 +9179,199 @@ function openSettings(focus) {
   tbl.append(h('div', { class: 'pv-row' }, h('b', { text: 'Offline Wikipedia' }), h('span', { id: 'privPack', text: privPackText() })));
   tbl.append(h('div', { class: 'pv-row' }, h('b', { text: 'Dictation' }), h('span', { id: 'privDict', text: privDictText() })));
   tbl.append(h('div', { class: 'pv-row' }, h('b', { text: 'Daily reading' }), h('span', { text: 'Wikipedia’s news feed (nothing about you) and, if you allow it, a few of your favorite topic words to Wikipedia, GDELT and Hacker News.' })));
-  b.append(sec('privacy', 'What leaves this computer', hint('Your questions are answered by the AI model on your own graphics chip. Only these short messages go out, and only when Lumen needs them. Your chats, files, name, memory, saved notes and settings never do.'), tbl,
-    hint('The AI model files and the page libraries are downloaded once from public servers (Hugging Face, GitHub and jsDelivr). Those servers see your internet address. After that Lumen works without internet, apart from look-ups.'),
+  b.append(sec('privacy', 'What leaves this computer', hint('Your questions are answered on your own graphics chip. Only these short messages go out, and only when needed. Your chats, files, name, memory, notes, usage numbers and settings never do.'), tbl,
+    hint('The AI model files and page libraries are downloaded once from public servers (Hugging Face, GitHub, jsDelivr). Those servers see your internet address.'),
     h('div', { class: 'lrn-switch' }, h('div', { class: 'lt' }, h('b', { text: 'Label copied answers' }), h('span', { text: `Adds “(${AI_LABEL})” when you copy an answer. Saved files and printouts always carry it.` })),
       toggle('Label copied answers', S.aiLabel !== false, v => { S.aiLabel = v; saveSettings(); })),
     h('div', { class: 'opt-row' }, ...[['about', 'About and limits'], ['privacy', 'Privacy'], ['terms', 'Terms'], ['credits', 'Credits']].map(([k, t]) => h('button', { class: 'btn', type: 'button', text: t, onclick: () => openLegal(k) })))));
 
   const sc = h('div', { class: 'shortcuts' });
-  for (const [what, keys] of [['Send message', ['Enter']], ['New line', ['Shift', 'Enter']], ['Commands', ['/']], ['Stop the answer', ['Esc']], ['Search and commands', [MOD, 'K']], ['Add a file', [MOD, 'U']], ['New chat', [MOD, 'Shift', 'O']], ['Show or hide the sidebar', [MOD, 'B']], ['What Lumen can do', [MOD, '/']]])
+  for (const [what, keys] of [['Send message', S.sendKey === 'mod' ? [MOD, 'Enter'] : ['Enter']], ['New line', S.sendKey === 'mod' ? ['Enter'] : ['Shift', 'Enter']], ['Commands', ['/']], ['Stop the answer', ['Esc']], ['Search and commands', [MOD, 'K']], ['Add a file', [MOD, 'U']], ['New chat', [MOD, 'Shift', 'O']], ['Show or hide the sidebar', [MOD, 'B']], ['What Lumen can do', [MOD, '/']]])
     sc.append(h('span', { text: what }), h('span', {}, ...keys.map(k => h('kbd', { text: k }))));
   b.append(sec('keys', 'Keyboard shortcuts', sc));
   b.append(sec('how', 'How Lumen works',
-    hint('Lumen runs the Qwen3.5 language model inside your browser with WebGPU, using the WebLLM engine. Your messages are processed on your own graphics chip and are not sent to any AI company. Chats are stored in this browser only. When Lumen thinks, it does so in the background and shows only a short title of each step; you can open the full thinking afterwards. The AI’s own knowledge ends around the end of 2025. Newer facts come from the look-ups, so check important things.'),
-    h('p', { class: 'hint', html: 'Credits: <a href="https://github.com/QwenLM" target="_blank" rel="noopener noreferrer">Qwen3.5</a> by Alibaba (Apache 2.0) · <a href="https://github.com/mlc-ai/web-llm" target="_blank" rel="noopener noreferrer">WebLLM</a> by MLC (Apache 2.0) · <a href="https://en.wikipedia.org" target="_blank" rel="noopener noreferrer">Wikipedia</a> (CC BY-SA 4.0) and <a href="https://www.wikidata.org" target="_blank" rel="noopener noreferrer">Wikidata</a> (CC0) · Weather data by <a href="https://open-meteo.com" target="_blank" rel="noopener noreferrer">Open-Meteo.com</a> (CC BY 4.0) · Exchange rates from the European Central Bank via <a href="https://frankfurter.dev" target="_blank" rel="noopener noreferrer">Frankfurter</a> · Crypto prices by <a href="https://www.coingecko.com" target="_blank" rel="noopener noreferrer">CoinGecko</a> · News from <a href="https://www.gdeltproject.org" target="_blank" rel="noopener noreferrer">GDELT</a> and <a href="https://news.ycombinator.com" target="_blank" rel="noopener noreferrer">Hacker News</a> · Papers from <a href="https://openalex.org" target="_blank" rel="noopener noreferrer">OpenAlex</a> · Marked, DOMPurify, KaTeX, highlight.js, pdf.js, Mermaid.' })));
-  if (!els.settings.open) els.settings.showModal();
-  if (focus) setTimeout(() => $('#set-' + focus, els.settings)?.scrollIntoView({ block: 'start' }), 0);
+    hint('Lumen runs the Qwen3.5 language model inside your browser with WebGPU. Your messages are processed on your own graphics chip, not sent to any AI company, and chats are stored in this browser only.'),
+    more('When Lumen thinks, it does so in the background and shows a short title for each step; you can open the full thinking afterwards. The AI’s own knowledge ends around the end of 2025. Newer facts come from look-ups, so check important things.'),
+    h('details', { class: 'more' }, h('summary', { text: 'Credits' }), h('p', { class: 'hint', html: 'Credits: <a href="https://github.com/QwenLM" target="_blank" rel="noopener noreferrer">Qwen3.5</a> by Alibaba (Apache 2.0) · <a href="https://github.com/mlc-ai/web-llm" target="_blank" rel="noopener noreferrer">WebLLM</a> by MLC (Apache 2.0) · <a href="https://en.wikipedia.org" target="_blank" rel="noopener noreferrer">Wikipedia</a> (CC BY-SA 4.0) and <a href="https://www.wikidata.org" target="_blank" rel="noopener noreferrer">Wikidata</a> (CC0) · Weather data by <a href="https://open-meteo.com" target="_blank" rel="noopener noreferrer">Open-Meteo.com</a> (CC BY 4.0) · Exchange rates from the European Central Bank via <a href="https://frankfurter.dev" target="_blank" rel="noopener noreferrer">Frankfurter</a> · Crypto prices by <a href="https://www.coingecko.com" target="_blank" rel="noopener noreferrer">CoinGecko</a> · News from <a href="https://www.gdeltproject.org" target="_blank" rel="noopener noreferrer">GDELT</a> and <a href="https://news.ycombinator.com" target="_blank" rel="noopener noreferrer">Hacker News</a> · Papers from <a href="https://openalex.org" target="_blank" rel="noopener noreferrer">OpenAlex</a> · Marked, DOMPurify, KaTeX, highlight.js, pdf.js, Mermaid.' }))));
+  b.append(...usageSection());
+  buildSettings(b, focus);
 }
 els.openSettings.addEventListener('click', () => { closeNav(); openSettings(); });
 els.closeSettings.addEventListener('click', () => els.settings.close());
 els.settings.addEventListener('click', e => { if (e.target === els.settings) els.settings.close(); });
 els.settings.addEventListener('close', () => { if (!current()?.messages.length) els.greet.textContent = greeting(); });
+
+/* ---------- settings pages ----------
+   Settings is a menu on the left and one page at a time on the right (on a phone: a list first, then the page).
+   openSettings() in 190-settings-ui.js builds every section; buildSettings() puts them on their pages. */
+const SET_PAGES = [
+  { id: 'general', icon: 'sliders', title: 'General', sub: 'Profile, looks and how Lumen answers', secs: ['about', 'look', 'answers'] },
+  { id: 'model', icon: 'spark', title: 'Model', sub: 'The AI model, its memory and battery use', secs: ['models', 'ctx', 'saver', 'computer'] },
+  { id: 'memory', icon: 'bookmark', title: 'Memory', sub: 'What Lumen remembers and learns', secs: ['memory', 'rules', 'learn'] },
+  { id: 'lookups', icon: 'globe', title: 'Look-ups', sub: 'Where Lumen finds facts', secs: ['sources', 'web', 'wikipack'] },
+  { id: 'voice', icon: 'mic', title: 'Voice', sub: 'Read aloud and dictation', secs: ['voice', 'dictate'] },
+  { id: 'usage', icon: 'chart', title: 'Usage', sub: 'Tokens, answers and screen time', secs: ['usage', 'usagechart', 'usagemodels', 'usagecare'] },
+  { id: 'data', icon: 'shield', title: 'Data and privacy', sub: 'Storage, backups and what leaves this computer', secs: ['storage', 'privacy'] },
+  { id: 'advanced', icon: 'code', title: 'Advanced', sub: 'Instructions, examples, tests and shortcuts', secs: ['prompt', 'examples', 'vote', 'lab', 'keys'] },
+  { id: 'about', icon: 'info', title: 'About', sub: 'How Lumen works and credits', secs: ['how'] },
+];
+let setPageId = 'general';
+const setNarrow = () => window.matchMedia('(max-width: 720px)').matches;
+
+function paintSetHead() {
+  const shell = $('#setShell'), pg = SET_PAGES.find(p => p.id === setPageId) || SET_PAGES[0];
+  const onPage = setNarrow() && shell.dataset.view === 'page';
+  $('#settingsTitle').textContent = onPage ? pg.title : 'Settings';
+  $('#setBack').hidden = !onPage;
+}
+function showSetPage(id, { view = 'page', scrollTop = true } = {}) {
+  const pg = SET_PAGES.find(p => p.id === id) || SET_PAGES[0];
+  setPageId = pg.id;
+  $('#setShell').dataset.view = view;
+  for (const el of els.settingsBody.querySelectorAll('.set-page')) el.hidden = el.id !== 'page-' + pg.id;
+  for (const b of $('#setNav').children) { if (b.dataset.page === pg.id) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
+  if (scrollTop) els.settingsBody.scrollTop = 0;
+  paintSetHead();
+}
+function buildSettings(pool, focus) {
+  const nav = $('#setNav'), body = els.settingsBody;
+  body.replaceChildren(); nav.replaceChildren();
+  for (const pg of SET_PAGES) {
+    const page = h('div', { class: 'set-page', id: 'page-' + pg.id, hidden: true },
+      h('div', { class: 'set-ptitle', role: 'heading', 'aria-level': '3', text: pg.title }), h('p', { class: 'set-psub', text: pg.sub }));
+    for (const id of pg.secs) for (const sct of pool.querySelectorAll('#set-' + id)) page.append(sct);
+    body.append(page);
+    nav.append(h('button', { type: 'button', class: 'set-tab', 'data-page': pg.id, onclick: () => showSetPage(pg.id) },
+      h('span', { class: 'ni', html: icon(pg.icon, 18) }), h('span', { class: 'nt' }, h('b', { text: pg.title }), h('small', { text: pg.sub })), h('span', { class: 'nc', html: icon('chevr', 15) })));
+  }
+  const target = focus ? body.querySelector('#set-' + focus) : null;
+  const pageOf = target ? target.closest('.set-page')?.id.slice(5) : SET_PAGES.some(p => p.id === focus) ? focus : null;
+  // desktop: always show a page; phone: the list, unless something asked for one place
+  showSetPage(pageOf || setPageId, { view: pageOf || !setNarrow() ? 'page' : 'list' });
+  if (!els.settings.open) els.settings.showModal();
+  if (target) setTimeout(() => target.scrollIntoView({ block: 'start' }), 0);
+}
+$('#setBack').innerHTML = icon('back', 18);
+$('#setBack').addEventListener('click', () => { $('#setShell').dataset.view = 'list'; paintSetHead(); $('#setNav .set-tab[aria-current]')?.focus(); });
+window.matchMedia('(max-width: 720px)').addEventListener?.('change', paintSetHead);
+
+/* ---------- the Usage page in Settings ----------
+   Numbers come from the Usage module (036-usage.js). Everything is counted on this computer only. */
+const USAGE_PERIODS = [[1, 'Today'], [7, '7 days'], [30, '30 days'], [0, 'All time']];
+const usageDate = (d, long) => d.toLocaleDateString('en-GB', long ? { weekday: 'short', day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short' });
+const usageLabel = (n, one, many) => `${Math.round(n).toLocaleString('en-US')} ${Math.round(n) === 1 ? one : many}`;
+function niceMax(m) {
+  if (!(m > 0)) return 1;
+  const p = 10 ** Math.floor(Math.log10(m));
+  for (const f of [1, 2, 2.5, 5, 10]) if (f * p >= m) return f * p;
+  return 10 * p;
+}
+const USAGE_METRICS = {
+  tokens: { label: 'Tokens', unit: 'tokens', get: d => d.tokens, fmt: v => fmtNum(v), long: v => usageLabel(v, 'token', 'tokens') },
+  answers: { label: 'Answers', unit: 'answers', get: d => d.answers, fmt: v => String(Math.round(v)), long: v => usageLabel(v, 'answer', 'answers') },
+  minutes: { label: 'Minutes', unit: 'minutes', get: d => d.minutes, fmt: v => (v >= 60 ? (v / 60).toFixed(1).replace('.0', '') + ' h' : Math.round(v) + ' min'), long: v => (v < 1 && v > 0 ? 'under 1 minute' : usageLabel(v, 'minute', 'minutes')) },
+};
+let usageUiTimer = null;
+
+function usageSection() {
+  let period = 7, metric = 'tokens', asTable = false, chartSig = '';
+  const tiles = h('div', { class: 'u-tiles' }), foot = h('p', { class: 'hint' }), chartBox = h('div', { class: 'u-chart-box' }), tableBtn = h('button', { class: 'btn small', type: 'button', 'aria-pressed': 'false', text: 'Show as table' });
+  const modelBox = h('div', { class: 'u-meters' }), modeBox = h('div', { class: 'u-meters' }), visitBox = h('dl', { class: 'kv u-kv' }), careBox = h('dl', { class: 'kv u-kv' });
+
+  const tile = (label, value, sub, id) => h('div', { class: 'u-tile', id }, h('span', { class: 'u-l', text: label }), h('b', { class: 'u-v', text: value }), h('span', { class: 'u-s', text: sub }));
+  function paintTiles() {
+    const t = Usage.totals(period);
+    const total = t.i + t.o;
+    tiles.replaceChildren(
+      tile('Tokens used', fmtNum(total), total ? `${fmtNum(t.i)} read · ${fmtNum(t.o)} written` : 'None yet', 'uTokens'),
+      tile('Answers', String(t.a), t.o ? `About ${fmtNum(Math.round(t.o * 0.75))} words written` : 'None yet', 'uAnswers'),
+      tile('Screen time', t.t ? fmtDur(t.t) : '0 min', t.days > 1 ? `${fmtDur(t.t / t.days)} on an active day` : t.t ? 'With Lumen open and in use' : 'None yet', 'uTime'),
+      tile('Speed', t.tps ? t.tps.toFixed(1) : '—', t.tps ? 'tokens per second' : 'Shown after your first answer', 'uSpeed'));
+    foot.textContent = `Counted on this computer since ${usageDate(new Date(Usage.since()))}${Usage.streak() > 1 ? ` · ${Usage.streak()} days in a row` : ''}. Nothing is sent anywhere.`;
+    // by model and by thinking mode
+    const mrows = Object.entries(t.models).map(([k, v]) => [MODELS.find(m => m.key === k)?.name || k, v.i + v.o, `${fmtNum(v.i)} read · ${fmtNum(v.o)} written`]).sort((a, b) => b[1] - a[1]);
+    const mtotal = mrows.reduce((n, r) => n + r[1], 0);
+    modelBox.replaceChildren(...(mrows.length ? mrows.map(r => meter(r[0], r[1], mtotal, usageLabel(r[1], 'token', 'tokens'), r[2])) : [h('p', { class: 'hint', text: 'Nothing yet. Ask Lumen a question and the numbers appear here.' })]));
+    const drows = Object.entries(t.modes).map(([k, v]) => [MODES[k]?.label || k, v]).sort((a, b) => b[1] - a[1]);
+    const dtotal = drows.reduce((n, r) => n + r[1], 0);
+    modeBox.replaceChildren(...(drows.length ? drows.map(r => meter(r[0], r[1], dtotal, usageLabel(r[1], 'answer', 'answers'))) : [h('p', { class: 'hint', text: 'No answers yet in this time.' })]));
+    if (t.l) modeBox.append(h('p', { class: 'hint', id: 'uLab', text: `${fmtNum(t.l)} of the tokens above were used by the Test lab.` }));
+  }
+  function meter(name, v, total, right, sub) {
+    const pct = total > 0 ? Math.max(2, Math.round(v / total * 100)) : 0;
+    const bar = h('div', { class: 'u-bar', role: 'img', 'aria-label': `${name}: ${Math.round(v / (total || 1) * 100)} percent` }, h('i', {}));
+    bar.firstChild.style.width = pct + '%';
+    return h('div', { class: 'u-meter' }, h('div', { class: 'u-mt' }, h('b', { text: name }), h('span', { text: right })), bar, sub ? h('span', { class: 'u-ms', text: sub }) : null);
+  }
+
+  function paintChart() {
+    const M = USAGE_METRICS[metric], days = Usage.series(14), vals = days.map(M.get), max = Math.max(...vals);
+    tableBtn.textContent = asTable ? 'Show as chart' : 'Show as table'; tableBtn.setAttribute('aria-pressed', String(asTable));
+    if (asTable) {
+      const tb = h('table', { class: 'u-table', id: 'uTable' }, h('thead', {}, h('tr', {}, ...['Day', 'Tokens', 'Answers', 'Minutes'].map(x => h('th', { scope: 'col', text: x })))),
+        h('tbody', {}, ...[...days].reverse().map(d => h('tr', {}, h('th', { scope: 'row', text: usageDate(d.date, true) }), h('td', { text: d.tokens.toLocaleString('en-US') }), h('td', { text: String(d.answers) }), h('td', { text: String(d.minutes) })))));
+      chartBox.replaceChildren(tb); return;
+    }
+    if (!(max > 0)) { chartBox.replaceChildren(h('p', { class: 'hint u-empty', id: 'uEmpty', text: `No ${M.unit} in the last 14 days yet.` })); return; }
+    const top = niceMax(max), last = days.length - 1, maxAt = vals.indexOf(max);
+    const tip = h('div', { class: 'u-tip', role: 'tooltip', hidden: true });
+    const cols = h('div', { class: 'u-cols' });
+    days.forEach((d, i) => {
+      const v = vals[i], isToday = i === last;
+      const bar = h('i', { class: 'u-b' }); bar.style.height = (v / top * 100) + '%';
+      const col = h('div', { class: 'u-col', tabindex: '0', role: 'img', 'aria-label': `${usageDate(d.date, true)}: ${M.long(v)}`, 'data-v': String(v) }, v > 0 ? bar : null,
+        v > 0 && (i === maxAt || isToday) ? h('span', { class: 'u-val', text: M.fmt(v) }) : null);
+      if (v > 0 && (i === maxAt || isToday)) col.querySelector('.u-val').style.bottom = `calc(${v / top * 100}% + 3px)`;
+      const show = () => { tip.textContent = `${usageDate(d.date, true)} · ${M.long(v)}`; tip.hidden = false; const w = chartPlot.clientWidth, x = col.offsetLeft + col.offsetWidth / 2; tip.style.left = Math.min(Math.max(x, tip.offsetWidth / 2), w - tip.offsetWidth / 2) + 'px'; };
+      col.addEventListener('pointerenter', show); col.addEventListener('focus', show);
+      col.addEventListener('pointerleave', () => { tip.hidden = true; }); col.addEventListener('blur', () => { tip.hidden = true; });
+      cols.append(col);
+    });
+    const chartPlot = h('div', { class: 'u-plot' }, h('div', { class: 'u-grid' }, h('i', {}), h('i', {}), h('i', {})), cols, tip, h('span', { class: 'u-ymax', text: M.fmt(top) }));
+    const xl = h('div', { class: 'u-x' }, h('span', { text: usageDate(days[0].date) }), h('span', { text: usageDate(days[7].date) }), h('span', { text: 'Today' }));
+    chartBox.replaceChildren(h('div', { class: 'u-chart', id: 'uChart', role: 'group', 'aria-label': `${M.label} per day, last 14 days` }, chartPlot, xl));
+  }
+
+  function paintCare() {
+    const s = Usage.session, d = Usage._data(), n = Object.keys(d.days).length, kb = Math.max(1, Math.round(JSON.stringify(d).length / 1000));
+    visitBox.replaceChildren(h('dt', { text: 'Open and in use' }), h('dd', { id: 'uVisitTime', text: fmtDur(s.t) }), h('dt', { text: 'Answers' }), h('dd', { text: String(s.a) }), h('dt', { text: 'Tokens' }), h('dd', { text: fmtNum(s.i + s.o) }));
+    careBox.replaceChildren(h('dt', { text: 'Days in a row' }), h('dd', { id: 'uStreak', text: String(Usage.streak()) }), h('dt', { text: 'Days recorded' }), h('dd', { text: String(n) }), h('dt', { text: 'Space used' }), h('dd', { text: `about ${kb} KB` }));
+  }
+  const paintAll = () => { paintTiles(); paintChart(); paintCare(); chartSig = JSON.stringify(Usage.series(14)); };
+  tableBtn.addEventListener('click', () => { asTable = !asTable; paintChart(); });
+
+  const periodSeg = seg('Time range', USAGE_PERIODS.map(([v, l]) => [v, l]), period, v => { period = v; paintTiles(); });
+  const metricSeg = seg('Show', Object.entries(USAGE_METRICS).map(([k, m]) => [k, m.label]), metric, v => { metric = v; paintChart(); });
+  const summary = () => {
+    const t = Usage.totals(period), name = USAGE_PERIODS.find(p => p[0] === period)[1].toLowerCase();
+    return `Lumen usage (${name})\nTokens: ${t.i + t.o} (${t.i} read, ${t.o} written)\nAnswers: ${t.a}\nScreen time: ${t.t ? fmtDur(t.t) : '0 min'}\nSpeed: ${t.tps ? t.tps.toFixed(1) + ' tokens per second' : 'not measured yet'}`;
+  };
+  const sec = (id, title, ...kids) => h('section', { id: 'set-' + id }, title ? h('h3', { text: title }) : null, ...kids);
+  const nudge = h('div', { class: 'set-row' }, h('div', { class: 'lt' }, h('b', { text: 'Break reminder' }), h('span', { text: 'A small message after 45 minutes of use. Off by default.' })),
+    toggle('Break reminder', S.breakNudge, v => { S.breakNudge = v; saveSettings(); }));
+
+  const out = [
+    sec('usage', 'Overview', h('div', { class: 'u-top' }, periodSeg), tiles, foot,
+      h('details', { class: 'more' }, h('summary', { text: 'What is a token?' }), h('p', { class: 'hint', text: 'A token is a small piece of a word. About 4 tokens make 3 words. “Read” tokens are what Lumen was given (your question, notes and chat). “Written” tokens are what it wrote back. Screen time counts only while Lumen is open, visible and in use.' }))),
+    sec('usagechart', 'Last 14 days', h('div', { class: 'u-top' }, metricSeg, tableBtn), chartBox),
+    sec('usagemodels', 'Where the tokens went', h('h4', { text: 'By model' }), modelBox, h('h4', { text: 'By thinking mode' }), modeBox),
+    sec('usagecare', 'This visit and care', visitBox, h('hr', { class: 'thin' }), careBox, nudge,
+      h('div', { class: 'opt-row' },
+        h('button', { class: 'btn', type: 'button', id: 'uCopy', html: `${icon('copy', 15)}<span>Copy summary</span>`, onclick: () => { copyText(summary()); toast('Summary copied.'); } }),
+        armedButton('Reset usage numbers', 'Click again to reset', () => { Usage.reset(); paintAll(); toast('Usage numbers were reset.'); })),
+      h('p', { class: 'hint', text: 'The numbers live in this browser only. “Delete all my data” removes them too.' })),
+  ];
+  paintAll();
+  clearInterval(usageUiTimer);
+  usageUiTimer = setInterval(() => {
+    if (!tiles.isConnected) { clearInterval(usageUiTimer); return; }
+    if (!els.settings.open || tiles.closest('[hidden]')) return;
+    paintTiles(); paintCare();
+    const sig = JSON.stringify(Usage.series(14));      // redraw the chart only when its numbers changed (so a tooltip is not wiped)
+    if (sig !== chartSig) { chartSig = sig; paintChart(); }
+  }, 5000);
+  return out;
+}
 
 /* ---------- export, import and printing ---------- */
 function widgetToMarkdown(w) {
@@ -9048,7 +9477,7 @@ window.addEventListener('beforeunload', e => { if (Brain.state === 'loading' && 
   Learn.start();
   if (location.protocol.startsWith('http') && 'serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   Brain.initTabs();
-  initLegal(); Saver.init(); Lab.init(); Dictation.sync(); WikiPack.init().catch(() => {});
+  Usage.start(); initLegal(); Saver.init(); Lab.init(); Dictation.sync(); WikiPack.init().catch(() => {});
   await Brain.detect();
   if (Brain.state === 'idle') {
     await Brain.refreshCached();
@@ -9058,7 +9487,7 @@ window.addEventListener('beforeunload', e => { if (Brain.state === 'loading' && 
   if (!narrow()) els.input.focus();
 })();
 try { window.hljs?.configure({ ignoreUnescapedHTML: true }); } catch {}
-window.__lumen = { LEGAL, Care, openLegal, labelCopy, showReadBox, WikiPack, Speech, Dictation, Lab, LabScore, LAB_QUESTIONS, LAB_PUZZLES, openLab, App, Brain, S, Calc, Net, Cache, splitStream, looping, trimRepeat, thinkTitle, renderMarkdown, shouldLookUp, keywordQuery, entityQuery, terms, cleanAnswer,
+window.__lumen = { Usage, LEGAL, Care, openLegal, labelCopy, showReadBox, WikiPack, Speech, Dictation, Lab, LabScore, LAB_QUESTIONS, LAB_PUZZLES, openLab, App, Brain, S, Calc, Net, Cache, splitStream, looping, trimRepeat, thinkTitle, renderMarkdown, shouldLookUp, keywordQuery, entityQuery, terms, cleanAnswer,
   localToolLines, timeNotes, unitNotes, fxIntent, weatherIntent, cryptoIntent, gather, selectDocText, chunkDoc, pickMode, pickPlaybook, planBudget, buildMessages, parseSlash, jsonFromText, STUDY_CHECK, readFileText, summarizeDocs, scheduleSummary, addMemory, Learn, Core, confidenceOf, Saver, Review, ROLES, setRole, getRole, solveParts, checkArithmetic, essayParagraphs, quoteInText, verifyComments, pickTop, runEssay, factCheck, claimsFrom, debateBalance, showFactCheck, chatToMarkdown, openSettings, submitText, send, wantDocs, plainText, slidesToHtml, chatToHtml, wikidataProps, webSearch, readPage, forkAt, switchFork, forkInfo, voteWorthy, finalAnswerOf, voteKey, voteTally, Examples, PROMPT_VERSIONS, basePrompt, EXAMPLES, systemPrompt, importBackup, Store, openChat, renderThread, saveChat, regenerate, resendEdited };
 </script>
 </body>
