@@ -1002,6 +1002,10 @@ const MODELS = [
     desc: 'Better reasoning and fewer mistakes, but about half as fast. On an 8 GB Mac, close other apps and tabs first.',
     downloadMB: 2390, vramMB: 3868, ctxSizes: { small: 4096, standard: 8192, large: 12288, max: 16384 }, repetition: 1.0,
     ids: { f16: 'Qwen3.5-4B-q4f16_1-MLC', f32: 'Qwen3.5-4B-q4f32_1-MLC' } },
+  { key: 'Qwen3.5-9B', name: 'Qwen3.5 9B', tag: 'Strongest', tagClass: 'lamp', power: true, needsGB: 16,
+    desc: 'The strongest model, for a strong computer: 16 GB of memory or more, with other apps closed. Clearly better reasoning and facts, and it unlocks the Max thinking mode. About half as fast as the 4B.',
+    downloadMB: 5061, vramMB: 6433, ctxSizes: { small: 4096, standard: 8192, large: 12288, max: 16384 }, repetition: 1.0,
+    ids: { f16: 'Qwen3.5-9B-q4f16_1-MLC', f32: 'Qwen3.5-9B-q4f32_1-MLC' } },
   { key: 'Qwen3.5-0.8B', name: 'Qwen3.5 0.8B', tag: 'Fastest', tagClass: 'plain',
     desc: 'Small and quick. Fine for simple questions, but it makes more mistakes.',
     downloadMB: 447, vramMB: 1629, ctxSizes: { small: 4096, standard: 8192, large: 16384, max: 32768 }, repetition: 1.05,
@@ -1019,6 +1023,8 @@ const MODES = {
            desc: 'Thinks briefly in the background, then answers. Best for “why” and “how” questions.' },
   deep:  { key: 'deep',  label: 'Deep',  icon: 'layers', think: true,  budget: 1700, answer: 1800, articles: 5, notesChars: 11000, plan: true, promptTokens: 8000, histTokens: 3200, docChars: 28000,
            desc: 'Plans several searches, reads more sources and thinks longer. For hard problems and reports. Slower.' },
+  max:   { key: 'max',   label: 'Max',   icon: 'layers', power: true, think: true, budget: 3000, answer: 2200, articles: 6, notesChars: 14000, plan: true, promptTokens: 9000, histTokens: 3600, docChars: 36000,
+           desc: 'Only with the 9B model. Plans searches, reads the most sources and thinks the longest. The slowest and most careful.' },
 };
 
 const STYLES = {
@@ -1112,6 +1118,7 @@ const ROLES = {
 const SLASH = [
   { cmd: 'search', icon: 'globe', arg: 'question', desc: 'Look this up on the web and in Wikipedia first' },
   { cmd: 'deep', icon: 'layers', arg: 'question', desc: 'Think longer and read more sources' },
+  { cmd: 'max', icon: 'layers', arg: 'question', desc: 'The longest, most careful thinking (needs the 9B model)', hidden: true },
   { cmd: 'fast', icon: 'bolt', arg: 'question', desc: 'Answer right away' },
   { cmd: 'think', icon: 'bulb', arg: 'question', desc: 'Think briefly, then answer' },
   { cmd: 'simple', icon: 'text', arg: 'question', desc: 'Explain in everyday words' },
@@ -1264,7 +1271,7 @@ function downloadFile(name, text, type = 'text/markdown') {
 /* ---------- settings ---------- */
 const DEFAULTS = {
   ver: 4, model: 'Qwen3.5-2B', mode: 'auto', style: 'normal', wiki: 'auto', about: '', name: '', rules: '', city: '',
-  creativity: 'balanced', theme: 'system', textSize: 'normal', sendKey: 'enter', breakNudge: false, check: true, autoStart: true, rail: true,
+  creativity: 'balanced', theme: 'system', textSize: 'normal', sendKey: 'enter', breakNudge: false, check: true, autoStart: true, keepAwake: true, strongPc: false, rail: true,
   ctxSize: 'large', memory: [], sources: {}, reader: 'ask', webProvider: 'jina', webKey: '', speechRate: 1, speechVoice: '', showNotes: true,
 };
 const S = (() => {
@@ -1287,6 +1294,10 @@ S.breakNudge = S.breakNudge === true;
 /* Source check (see 156-ground.js): look for dates, numbers and names that are in none of the sources, and write the answer again once without them. */
 S.check = S.check !== false;
 S.autoStart = S.autoStart !== false;
+S.keepAwake = S.keepAwake !== false;   // keep the screen awake while the AI works (see 043-guard.js)
+S.strongPc = S.strongPc === true;      // the person confirmed that this computer can run the 9B model
+if (!S.loaded || typeof S.loaded !== 'object' || Array.isArray(S.loaded)) S.loaded = {};   // models that loaded at least once here
+if (!Array.isArray(S.crashes)) S.crashes = [];
 if (!['jina', 'tavily'].includes(S.webProvider)) S.webProvider = 'jina';
 if (!Array.isArray(S.memory)) S.memory = [];
 S.memory = S.memory.filter(m => m && typeof m.text === 'string').slice(0, MEM_MAX);
@@ -1676,7 +1687,7 @@ const Brain = {
   loadedKey: null, loadingKey: null, loadPromise: null,
   phase: '', progress: 0, mb: 0, elapsed: 0, error: '', ctx: 8192, ctxWanted: 0, gpu: '',
   cached: {}, listeners: new Set(), busy: false, queue: Promise.resolve(),
-  limits: { firstCached: 60e3, first: 90e3, after: 60e3, warn: 20e3 },   // how long to wait with no sign of progress (ms)
+  limits: { firstCached: 60e3, first: 90e3, after: 60e3, warn: 20e3, genFirst: 300e3, genNext: 120e3, genTick: 2000, sleepGap: 20e3, unload: 4000 },   // how long to wait with no sign of progress (ms); gen* = while the AI writes an answer
   lastEvent: 0, events: 0, otherTab: false, stalled: false, stuck: false, wasCached: false, loadToken: 0, bc: null, tabId: '', pongs: 0,
 
   emit() { for (const f of this.listeners) { try { f(this); } catch (e) { console.error(e); } } },
@@ -1811,11 +1822,27 @@ const Brain = {
     return lib.CreateMLCEngine(id, cfg, chatOpts);
   },
 
+  /* Stop the engine. If the graphics chip is frozen, unload() may never answer, so it only gets a few seconds before the worker is ended. */
   async teardown() {
-    try { await this.engine?.unload?.(); } catch {}
-    try { this.worker?.terminate(); } catch {}
+    const eng = this.engine, wk = this.worker;
     this.engine = null; this.worker = null; this.loadedKey = null;
+    let t;
+    try { await Promise.race([Promise.resolve(eng?.unload?.()), new Promise(r => { t = setTimeout(r, this.limits.unload); })]); } catch {}
+    clearTimeout(t);
+    try { wk?.terminate(); } catch {}
   },
+  /* The AI stopped answering (or the graphics chip was lost): end it, then load the saved model again from this browser. */
+  recover() { return this._rec || (this._rec = this._recover().finally(() => { this._rec = null; })); },
+  async _recover() {
+    if (this.state === 'loading' || this.state === 'unsupported') return;
+    const key = this.loadedKey || S.model;
+    this.busy = false; this.queue = Promise.resolve(); this.state = 'idle'; this.phase = ''; this.progress = 0; this.recovered = (this.recovered || 0) + 1;
+    const ending = this.teardown();   // the engine is forgotten at once; ending the frozen one may take a few seconds
+    this.emit();
+    await ending;
+    if (this.state === 'idle') { try { await this.load(key); } catch {} }   // unless a load was started meanwhile (for example by “Try again”)
+  },
+  needsRecover(e) { return !!e?.hung || /device.*lost|context.*lost/i.test(String(e?.message || e || '')); },
 
   load(key = S.model) {
     if (this.state === 'unsupported') return Promise.reject(new Error(this.unsupportedWhy));
@@ -1839,6 +1866,7 @@ const Brain = {
     const token = ++this.loadToken;
     const tLoad0 = performance.now();
     this.emit();
+    Guard.enter('loading');
     try {
       const lib = await this.getLib();
       let wasCached = false;
@@ -1907,6 +1935,7 @@ const Brain = {
       this.ctxWanted = target;
       this.loadedKey = key; this.state = 'ready'; this.stalled = false; this.cached[key] = true; this.loadSec = Math.round((performance.now() - tLoad0) / 100) / 10;
       try { await navigator.storage?.persist?.(); } catch {}
+      if (!S.loaded[key]) { S.loaded[key] = true; saveSettings(); }   // so a later missing download can be explained
       this.emit();
       // Warm up the graphics chip so the first real answer starts faster.
       this.generate({ messages: [{ role: 'user', content: 'Hi' }], think: false, max_tokens: 1, temperature: 0.7, top_p: 0.8, presence_penalty: 0 }).catch(() => {});
@@ -1921,6 +1950,7 @@ const Brain = {
       throw e;
     } finally {
       if (token === this.loadToken) this.loadingKey = null;
+      Guard.leave();
     }
   },
 
@@ -1933,6 +1963,19 @@ const Brain = {
   async _generate({ messages, think, temperature, top_p, presence_penalty = 1.5, max_tokens, onDelta, json, seed }) {
     if (!this.engine || this.state !== 'ready') throw new Error('The AI model is not ready yet.');
     this.busy = true;
+    Guard.enter('answering');
+    /* Watchdog: if no word arrives for a long time, the graphics chip has probably frozen. Time when the computer slept does not count. */
+    const L = this.limits, wd = { last: Date.now(), tick: Date.now(), first: true };
+    let timer;
+    const hang = new Promise((_, rej) => {
+      timer = setInterval(() => {
+        const now = Date.now();
+        if (now - wd.tick > L.sleepGap) wd.last = now;
+        wd.tick = now;
+        if (now - wd.last > (wd.first ? L.genFirst : L.genNext)) rej(Object.assign(new Error('The AI stopped responding'), { hung: true }));
+      }, L.genTick);
+    });
+    hang.catch(() => {});
     try {
       const req = {
         messages, stream: true, stream_options: { include_usage: true },
@@ -1942,18 +1985,27 @@ const Brain = {
       if (Number.isInteger(seed)) req.seed = seed;
       if (json) req.response_format = { type: 'json_object', schema: typeof json === 'string' ? json : JSON.stringify(json) };
       const t0 = performance.now();
-      const stream = await this.engine.chat.completions.create(req);
+      const stream = await Promise.race([this.engine.chat.completions.create(req), hang]);
+      const it = stream[Symbol.asyncIterator]();
       let text = '', usage = null, finish = null;
-      for await (const chunk of stream) {
+      for (;;) {
+        const step = await Promise.race([it.next(), hang]);
+        if (step.done) break;
+        wd.last = Date.now(); wd.first = false;
+        const chunk = step.value;
         const choice = chunk.choices?.[0];
         const d = choice?.delta?.content || '';
         if (d) { text += d; onDelta?.(d, text); }
         if (choice?.finish_reason) finish = choice.finish_reason;
         if (chunk.usage) usage = chunk.usage;
       }
-      if (max_tokens !== 1) try { Usage.addCall({ model: this.loadedKey, usage, text, messages, ms: performance.now() - t0, lab: typeof Lab !== 'undefined' && !!Lab.isBusy?.() }); } catch {}   // counted on this computer only (the 1-token warm-up after loading is not counted)
+      if (max_tokens !== 1) try { Usage.addCall({ model: this.loadedKey, usage, text, messages, ms: performance.now() - t0, lab: typeof Lab !== 'undefined' && !!Lab.isBusy?.() }); } catch {}   // counted on this computer only (the 1-token warm-up after loading
       return { text, usage, finish };
-    } finally { this.busy = false; }
+    } catch (e) {
+      if (e?.hung) { try { this.engine?.interruptGenerate?.(); } catch {} }   // not waited for: a frozen engine would never answer
+      if (this.needsRecover(e)) this.recover().catch(() => {});   // load the saved model again, by itself
+      throw e;
+    } finally { clearInterval(timer); this.busy = false; Guard.leave(); }
   },
 
   async interrupt() { try { await this.engine?.interruptGenerate(); } catch {} },
@@ -1983,18 +2035,101 @@ function isNetworkError(e) { return /failed to fetch|networkerror|network error|
 const BROKEN_FILES_RE = /exceeds shard size|Tensor-cache record|shard size|checksum|corrupt|unexpected end of|Unexpected EOF/i;
 function friendlyError(e) {
   const msg = String(e?.message || e || 'Unknown error');
+  if (e?.hung) return 'The AI stopped responding for a long time (the graphics chip may have frozen), so Lumen stopped it and is loading the model again from the saved files. Press “Try again” in a moment. If it keeps happening, choose a smaller memory size or a smaller model in Settings.';
   if (BROKEN_FILES_RE.test(msg)) return 'The saved model files are broken (a download was probably cut short). Lumen tried to delete them and download them again, but it did not work. Open Settings → Model, press “Delete download” on this model, and download it again on a stable connection.';
   if (/^module: opened-as-file/i.test(msg)) return 'Chrome does not let a page that was opened as a file load the AI engine. Open the web link of Lumen instead. Or open the Terminal, go to the Lumen folder, run  python3 -m http.server 8000  and open http://localhost:8000 in Chrome.';
   if (/^module:/i.test(msg)) return 'The AI engine could not be loaded. The internet is needed the first time. Check your connection, then reload the page.';
   if (isNetworkError(msg)) return 'The download stopped because the internet connection was lost. Parts that finished are saved. Check your connection and try again.';
   if (/context ?window|ContextWindowSizeExceeded|prompt.*(too long|exceed)/i.test(msg)) return 'This message is too long for the model to read at once. Shorten it, or start a new chat.';
   if (/quota|storage|space/i.test(msg)) return 'There is not enough free storage for the model in this browser. Free some disk space, or pick a smaller model.';
+  if (/device.*lost|context.*lost/i.test(msg)) return 'The graphics chip was reset by the browser (this can happen when the screen sleeps or the memory is full). Lumen is loading the model again from the saved files. Press “Try again” in a moment.';
   if (/device.*lost|out of memory|oom|allocation|createbuffer|GPUOutOfMemory/i.test(msg)) return 'Your graphics chip ran out of memory. Close other tabs and apps, then try again, or pick a smaller model.';
   if (/shader-f16|feature/i.test(msg)) return 'This graphics chip is missing a feature the model needs. Try the 0.8B model or update your browser.';
   return 'Something went wrong: ' + clip(msg, 220);
 }
 /* The memory size in use right now (or the one that will be used once the model loads). */
 const ctxNow = () => (Brain.state === 'ready' ? Brain.ctx : ctxTarget(Brain.model(S.model)));
+
+/* ---------- crash guard ----------
+   Sometimes a page stops without any error: the browser closes a tab that uses a lot of graphics memory, puts it to sleep, or the
+   graphics chip freezes. Then the page starts again and everything looks like a reset.
+   While Lumen loads the model or writes an answer it keeps a small note in this tab's session storage (never sent anywhere).
+   A normal close or reload removes the note. If the note is still there at the next start, the last run did not end normally:
+   Lumen then says what probably happened, and after repeated crashes it lowers the memory size by itself.
+   It also keeps the screen awake while it works (a sleeping screen can make the graphics chip stop), if Settings allow it. */
+const Guard = {
+  KEY: 'lumen-run', depth: 0, phase: '', beat: null, lock: null, locking: false, crash: null,
+
+  read() { try { return JSON.parse(sessionStorage.getItem(this.KEY) || 'null'); } catch { return null; } },
+  write() {
+    try {
+      sessionStorage.setItem(this.KEY, JSON.stringify({
+        phase: this.phase, model: Brain.loadedKey || Brain.loadingKey || S.model, ctx: Brain.ctx || 0,
+        t: Date.now(), vis: document.visibilityState, mb: Math.round(Brain.mb || 0),
+      }));
+    } catch {}
+  },
+  clear() { try { sessionStorage.removeItem(this.KEY); } catch {} },
+
+  /* Called once at the start of the page. Returns what the last run left behind, or null if it ended normally. */
+  boot() {
+    const o = this.read(); this.clear();
+    if (!o || !o.phase) return null;
+    const discarded = !!document.wasDiscarded;
+    const reason = discarded ? 'discarded' : o.vis === 'hidden' ? 'background' : 'crash';
+    const mdl = MODELS.find(m => m.key === o.model);
+    const name = mdl ? mdl.name : 'the model';
+    const log = (Array.isArray(S.crashes) ? S.crashes : []).filter(c => Date.now() - c.t < 864e5);
+    log.push({ t: Date.now(), model: o.model, reason, phase: o.phase });
+    S.crashes = log.slice(-12);
+    // Two foreground crashes with the same model in a day: use a lighter memory size.
+    let stepped = '';
+    if (reason === 'crash' && log.filter(c => c.reason === 'crash' && c.model === o.model).length >= 2) {
+      const order = ['max', 'large', 'standard', 'small'], i = order.indexOf(S.ctxSize);
+      if (mdl && i >= 0 && i < order.length - 1) {
+        S.ctxSize = order[i + 1];
+        stepped = `To be safer, Lumen lowered the memory size to “${S.ctxSize}” (${ctxTarget(mdl) / 1024}K). You can change it in Settings.`;
+      }
+    }
+    saveSettings();
+    const where = o.phase === 'loading' ? `while ${name} was loading` : 'while the AI was writing an answer';
+    let text;
+    if (reason === 'discarded') text = `The browser put this tab to sleep to free memory ${where}, so the page started again. Your chat is saved. In Chrome you can stop this: Settings → Performance → “Always keep these sites active” → add this site.`;
+    else if (reason === 'background') text = `The page was in the background or the screen was off ${where}, and the browser stopped it. Your chat is saved. Keep Lumen open on the screen while it works.`;
+    else text = `The page stopped without an error message ${where}, and the browser started it again. The most likely reason is that the graphics chip ran out of memory. Your chat is saved. Close big tabs and other heavy apps first.`;
+    if (stepped) text += ' ' + stepped;
+    this.crash = { reason, phase: o.phase, model: o.model, text, stepped: !!stepped };
+    return this.crash;
+  },
+
+  /* The AI starts or stops working. */
+  enter(phase) {
+    this.depth++; this.phase = phase;
+    this.write();
+    if (!this.beat) this.beat = setInterval(() => this.write(), 2000);
+    this.lockOn();
+  },
+  leave() {
+    this.depth = Math.max(0, this.depth - 1);
+    if (this.depth) return;
+    clearInterval(this.beat); this.beat = null; this.phase = '';
+    this.clear(); this.lockOff();
+  },
+
+  async lockOn() {
+    if (!S.keepAwake || this.lock || this.locking || !navigator.wakeLock || document.visibilityState !== 'visible') return;
+    this.locking = true;
+    try {
+      const l = await navigator.wakeLock.request('screen');
+      if (!this.depth) { try { l.release(); } catch {} }
+      else { this.lock = l; l.addEventListener('release', () => { if (this.lock === l) this.lock = null; }); }
+    } catch { this.lock = null; }
+    this.locking = false;
+  },
+  lockOff() { const l = this.lock; this.lock = null; try { l?.release(); } catch {} },
+};
+window.addEventListener('pagehide', e => { if (!e.persisted) Guard.clear(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && Guard.depth) { Guard.write(); Guard.lockOn(); } });
 
 /* ---------- safe calculator (no eval) ---------- */
 /* A small parser: numbers, + - * / ^ ( ), !, pi, e, and a few functions. It never runs the text as code. */
@@ -4293,7 +4428,7 @@ function renderPills() {
   els.wikiBtn.title = 'Look-ups: ' + WIKI_MODES[S.wiki].desc;
 }
 els.modeBtn.addEventListener('click', () => showMenu(els.modeBtn, 'How much should Lumen think?',
-  Object.values(MODES).map(m => ({ value: m.key, label: m.label, desc: m.desc, icon: m.icon })), S.mode, v => { S.mode = v; saveSettings(); renderPills(); }));
+  modesFor().map(m => ({ value: m.key, label: m.label, desc: m.desc, icon: m.icon })), S.mode, v => { S.mode = v; saveSettings(); renderPills(); }));
 els.styleBtn.addEventListener('click', () => showMenu(els.styleBtn, 'Answer style',
   Object.entries(STYLES).map(([k, s]) => ({ value: k, label: s.label, desc: s.desc })), S.style, v => { S.style = v; saveSettings(); renderPills(); }));
 const getRole = () => { const c = current(); return (c ? c.role : App.pendingRole) || ''; };
@@ -4437,7 +4572,7 @@ function summaryDivider(c) {
   return h('details', { class: 'sum-divider' }, h('summary', {}, h('span', { class: 'line' }), h('span', { class: 'lbl', html: icon('bookmark', 13) + '<span>Messages above are kept as a short summary</span>' }), h('span', { class: 'line' })),
     h('p', { text: c.summary }));
 }
-const OVR_LABEL = { fast: 'Fast', think: 'Think', deep: 'Deep' };
+const OVR_LABEL = { fast: 'Fast', think: 'Think', deep: 'Deep', max: 'Max' };
 function userTags(m) {
   const o = m.ovr || {}, out = [];
   if (o.mode) out.push([MODES[o.mode].icon, MODES[o.mode].label + ' mode']);
@@ -4802,6 +4937,8 @@ const DEBATE_RE = /\b(should (?:we|they|schools?|students?|people|countries|gove
 const LIVE_RE = /\b(weather|forecast|temperature|exchange rate|convert|price of|bitcoin|ethereum|crypto)\b/i;
 
 /* Auto mode: Fast for simple things, Think for reasoning, Deep for big jobs. Thinking costs time, so it is used only when it helps. */
+/* The modes the person may choose: Max needs a power model (the 9B). */
+const modesFor = () => Object.values(MODES).filter(m => !m.power || Brain.model(S.model).power);
 function pickMode(text, { hasDocs = false, exactOnly = false, toolOnly = false } = {}) {
   const t = (text || '').trim(), low = t.toLowerCase();
   const words = t.split(/\s+/).filter(Boolean).length;
@@ -4962,7 +5099,7 @@ const voteSpeak = key => (key || '').replace(/^[nbct]:/, '');
 /* ---------- a bigger model makes fewer mistakes: offered under a weak answer ----------
    Shown only when the answer is rated Low, has details that no source contains, or was marked wrong, and only when the computer has enough memory. */
 const Bigger = (() => {
-  const ORDER = ['Qwen3.5-0.8B', 'Qwen3.5-2B', 'Qwen3.5-4B'];
+  const ORDER = ['Qwen3.5-0.8B', 'Qwen3.5-2B', 'Qwen3.5-4B', 'Qwen3.5-9B'];
   function offer(m) {
     if (!m || !m.content || m.widget || m.state !== 'done' || Brain.state === 'unsupported') return null;
     const curKey = (MODELS.find(x => x.name === m.modelName) || { key: S.model }).key;
@@ -4972,11 +5109,13 @@ const Bigger = (() => {
     if (!weak) return null;
     const model = MODELS.find(x => x.key === ORDER[i + 1]);
     if (!model || S.model === model.key) return null;
-    if ((navigator.deviceMemory || 8) * 1000 < model.vramMB * 1.6) return null;   // the computer says it has too little memory for it
+    if (model.power) { if (!S.strongPc) return null; }   // the 9B model is offered only to a person who said that this computer is strong (the browser cannot tell: it reports at most 8 GB)
+    else if ((navigator.deviceMemory || 8) * 1000 < model.vramMB * 1.6) return null;   // the computer says it has too little memory for it
     return { model, cached: !!Brain.cached[model.key] };
   }
   async function use(chat, m, big) {
     if (App.run) { toast('Wait for the answer to finish first.'); return; }
+    if (!(await allowModel(big.model))) return;
     if (!big.cached) {
       const r = await askDialog({ title: `Use ${big.model.name}?`, text: `It needs a one-time download of ${fmtMB(big.model.downloadMB)} and about ${fmtMB(big.model.vramMB)} of graphics memory. It is slower, but it makes fewer mistakes. Close other tabs and apps first. Your chats stay on this computer.`, ok: 'Download and use it' });
       if (!r.ok) return;
@@ -4986,6 +5125,19 @@ const Bigger = (() => {
   }
   return { offer, use };
 })();
+
+/* A model for strong computers asks once before it is chosen: the browser cannot see how much memory the computer has (it reports 8 GB at most). */
+async function allowModel(m) {
+  if (!m.power || S.strongPc || Brain.cached[m.key]) return true;
+  const r = await askDialog({
+    title: `Use ${m.name}?`,
+    text: `${m.name} is made for strong computers: about ${m.needsGB} GB of memory (RAM) or more and a recent graphics chip, for example an Apple M-series Pro or Max chip or a gaming graphics card. It needs a one-time download of ${fmtMB(m.downloadMB)} and about ${fmtMB(m.vramMB)} of graphics memory. Close other apps and tabs first. On a computer that is too small, the page can stop or restart. Your chats stay on this computer.`,
+    ok: 'My computer is strong enough', cancel: 'Keep my model',
+  });
+  if (!r.ok) return false;
+  S.strongPc = true; saveSettings();
+  return true;
+}
 
 /* ---------- confidence label: High, Medium or Low, decided by evidence (sources, exact results), never by the model's own feeling ---------- */
 const STRONG_SITES = /^(Wikipedia|Wikidata|Wiktionary|Wikivoyage|Simple English Wikipedia|Lumen|Open-Meteo|Frankfurter|CoinGecko|OpenAlex)\b/i;
@@ -6873,6 +7025,7 @@ async function runTurn(chat, userMsg) {
   const exactOnly = local.lines.length > 0 && coreTerms(question).filter(w => !/^\d+$/.test(w)).length <= 3 && !REASON_RE.test(low);
   const toolOnly = toolHit && !REASON_RE.test(low);
   let modeKey = ovr.mode || S.mode, auto = false, autoWhy = '';
+  if (MODES[modeKey]?.power && !Brain.model(S.model).power) modeKey = 'deep';   // Max needs the 9B model
   if (MODES[modeKey]?.auto || !MODES[modeKey]) {
     const pk = pickMode(question, { hasDocs: docsOn, exactOnly, toolOnly });
     modeKey = pk.key; auto = true; autoWhy = pk.why;
@@ -6897,7 +7050,7 @@ async function runTurn(chat, userMsg) {
     // If the first search finds nothing that matches, the model is asked to fix the spelling of the search words.
     const rewrite = Saver.active() ? undefined : async () => { await ensureModel(run); checkStop(); return planQueries(question, prevUser); };
     const doGather = planned => gather({ question, prevQuestion: prevUser, plannedQueries: planned, maxArticles: mode.articles, charBudget: P.notesChars,
-      signal: run.ctl.signal, onStep, rewrite, simple: mode.key === 'deep' || style === 'simple', wikiOn, forceWeb: forceSearch, learned: lrn, prefer: lrn?.prefer, core: Core.enabled() && !docsOn && !exactOnly && !userMsg.noLookup && ovr.search !== 'off' })
+      signal: run.ctl.signal, onStep, rewrite, simple: mode.key === 'deep' || mode.key === 'max' || style === 'simple', wikiOn, forceWeb: forceSearch, learned: lrn, prefer: lrn?.prefer, core: Core.enabled() && !docsOn && !exactOnly && !userMsg.noLookup && ovr.search !== 'off' })
       .catch(e => (run.stopped ? null : { offline: true, sources: [], quality: 'offline', exact: local.lines, used: [], failed: [] }));
     let notesP = !mode.plan ? doGather(null) : null;
 
@@ -6947,7 +7100,7 @@ async function runTurn(chat, userMsg) {
     if (built.examples?.length) am.examples = built.examples;
     if (built.truncated) am.note = 'Your message was very long, so Lumen read only the first part';
     // Voting: Deep mode, a short checkable answer; the model is asked to end with "Final answer: X"
-    const voting = mode.key === 'deep' && !Saver.active() && !docsOn && !notes?.exact?.length && !userMsg.study && !userMsg.essay && (ovr.vote || (S.vote.on && voteWorthy(question))) && !!built.messages.length;
+    const voting = (mode.key === 'deep' || mode.key === 'max') && !Saver.active() && !docsOn && !notes?.exact?.length && !userMsg.study && !userMsg.essay && (ovr.vote || (S.vote.on && voteWorthy(question))) && !!built.messages.length;
     if (voting) { const lu = built.messages[built.messages.length - 1]; built.messages[built.messages.length - 1] = { ...lu, content: lu.content + VOTE_ASK }; }
     const grounded = !!(notes?.block || docs?.block || notes?.exact?.length);   // the answer rests on sources: steadier sampling
     setWork(am, mode.think ? 'Thinking it through' : 'Writing the answer', mode.think ? 0 : null);
@@ -7792,7 +7945,7 @@ function openLab() {
   }
   function modelSection() {
     const q = Lab.queue();
-    if (!labUI.models) labUI.models = new Set(MODELS.map(m => m.key));
+    if (!labUI.models) labUI.models = new Set(MODELS.filter(m => !m.power || S.strongPc || Brain.cached[m.key]).map(m => m.key));   // the 9B model is not pre-ticked unless this computer is known to be strong
     const checks = MODELS.map(m => {
       const inp = h('input', { type: 'checkbox', id: 'lab-m-' + m.key }); inp.checked = labUI.models.has(m.key);
       inp.addEventListener('change', () => { inp.checked ? labUI.models.add(m.key) : labUI.models.delete(m.key); });
@@ -8066,6 +8219,7 @@ async function runSlash(sl, raw, opts = {}) {
       return true;
     }
     case 'search': if (!arg) return needArg('your question'); await maybeReadLinks(arg); await send(arg, { ovr: { search: 'on' }, cmd }); return true;
+    case 'max': if (!Brain.model(S.model).power) { toast('Max needs the Qwen3.5 9B model. Choose it in Settings → AI model.'); return true; } if (!arg) return needArg('your question'); await send(arg, { ovr: { mode: 'max' }, cmd }); return true;
     case 'deep': case 'fast': case 'think': if (!arg) return needArg('your question'); await send(arg, { ovr: { mode: cmd }, cmd }); return true;
     case 'solve': if (!arg) return needArg('a problem, like /solve a car drives 150 km in 2 hours, what is its speed?'); await send(arg, { ovr: { playbook: 'math', mode: 'think' }, cmd }); return true;
     case 'vote': if (!arg) return needArg('a puzzle, like /vote a farmer has 17 sheep and all but 9 run away, how many are left?'); await send(arg, { ovr: { mode: 'deep', vote: true }, cmd }); return true;
@@ -8536,6 +8690,7 @@ function showMessageMenu(anchor, chat, m) {
   showActions(anchor, 'More', [
     { title: 'Answer again', items: [
       redo('Think harder', 'layers', { mode: 'deep' }, 'Deep mode: more thinking, more sources'),
+      ...(Brain.model(S.model).power ? [redo('Think the hardest (Max)', 'layers', { mode: 'max' }, 'Max mode: the longest thinking and the most sources')] : []),
       redo('Answer faster', 'bolt', { mode: 'fast' }, 'No thinking step'),
       redo('Search first', 'globe', { search: 'on' }, 'Look it up again, including the web'),
       redo('Without searching', 'x', { search: 'off' }, 'Use only what the AI remembers'),
@@ -8870,6 +9025,7 @@ const LEGAL_PAGES = {
       'It is a small AI model. It makes mistakes. It can state wrong facts, dates, numbers, names and quotes as if they were true, and it can invent sources.',
       'The AI’s own knowledge ends around the end of 2025. For newer things it needs a source.',
       'It can say untrue things about real people. Do not trust it for facts about private persons.',
+      'Bigger models (the 4B and the 9B) make fewer mistakes, but they still make them. The 9B model and Max mode need a strong computer (about 16 GB of memory) and are slower. On a computer that is too small the browser can stop or restart the page.',
       'The “Confidence” label only says whether sources were found. It does not prove that an answer is right.',
       'Lumen gives no medical, legal, money, mental-health or other professional advice. In an emergency call 112.',
       'Check important things yourself. Do not use Lumen alone for exams, health, money or safety decisions.']),
@@ -8888,7 +9044,7 @@ const LEGAL_PAGES = {
     lp('The AI model runs inside your browser. Your messages and Lumen’s answers are not sent to me or to any AI company. I cannot see, read or get them back.'),
     lh('What is saved on your device'),
     lul(['Your chats, in the browser’s database (IndexedDB).', 'Your settings, memory and learned habits (localStorage).', 'Usage numbers: how many answers and tokens, how many answers you marked good or wrong, how many were checked against sources, and how long Lumen was open and in use, one small line per day (localStorage). They hold no text from your chats.', 'Notes from look-ups, answers you marked as good, and files you added, as short saved text (IndexedDB). A correction you type after marking an answer wrong is saved with your memory.',
-      'The offline Wikipedia copy, only if you add one (IndexedDB).', 'The AI model files and a copy of this page so it opens without internet (browser storage).']),
+      'The offline Wikipedia copy, only if you add one (IndexedDB).', 'While the AI works, a tiny note (which model, how long, whether the tab is in front) in this tab’s session storage. It is removed when the answer ends, and it is used only to explain a page restart. A short list of recent restarts is kept with your settings.', 'The AI model files and a copy of this page so it opens without internet (browser storage).']),
     lp('Lumen needs this to work the way you asked, so there is no cookie banner. Lumen uses no tracking, no analytics, no ads and no accounts.'),
     h('div', { class: 'row' }, h('button', { class: 'btn', type: 'button', text: 'Delete all my data…', onclick: () => { closeLegal(); openSettings('storage'); } })),
     lp('You can delete everything at any time in Settings → Data and privacy → “Delete all my data”, or by clearing this site’s data in your browser.'),
@@ -8924,7 +9080,7 @@ const LEGAL_PAGES = {
   ] },
   credits: { title: 'Credits', build: () => [
     lh('AI model'),
-    lp(ext('https://huggingface.co/Qwen', 'Qwen3.5'), ' by the Qwen team at Alibaba Cloud, under the ', ext('https://www.apache.org/licenses/LICENSE-2.0', 'Apache License 2.0'), ' (licence checked on 12 October 2026 for the 0.8B, 2B and 4B models). The model files used here were converted to the MLC format by the ', ext('https://github.com/mlc-ai/mlc-llm', 'MLC project'), '. Lumen is not made by, connected to, or endorsed by Alibaba.'),
+    lp(ext('https://huggingface.co/Qwen', 'Qwen3.5'), ' by the Qwen team at Alibaba Cloud, under the ', ext('https://www.apache.org/licenses/LICENSE-2.0', 'Apache License 2.0'), ' (licence checked on 12 October 2026 for the 0.8B, 2B and 4B models, and on 13 October 2026 for the 9B model). The model files used here were converted to the MLC format by the ', ext('https://github.com/mlc-ai/mlc-llm', 'MLC project'), '. Lumen is not made by, connected to, or endorsed by Alibaba.'),
     lh('Wikipedia'),
     lp('Text from ', ext('https://en.wikipedia.org', 'Wikipedia'), ' (and Simple English Wikipedia, Wiktionary and Wikivoyage) is written by Wikipedia contributors and shared under the ', ext('https://creativecommons.org/licenses/by-sa/4.0/', 'Creative Commons Attribution-ShareAlike 4.0 licence'), ' (CC BY-SA 4.0). Lumen shows the article it used under each answer. If you add an offline Wikipedia copy, its text is shortened and has no pictures. Wikipedia® is a trademark of the Wikimedia Foundation. Lumen is not connected to or endorsed by the Wikimedia Foundation.'),
     lh('Software'),
@@ -9000,7 +9156,7 @@ function paletteActions() {
     mk('sun', 'Switch theme (light, dark, automatic)', () => { S.theme = { system: 'light', light: 'dark', dark: 'system' }[S.theme] || 'system'; saveSettings(); applyTheme(); toast('Theme: ' + ({ system: 'match computer', light: 'light', dark: 'dark' }[S.theme])); }),
     mk('panel', 'Show or hide the sidebar', () => setRail(narrow() ? !els.app.classList.contains('nav-open') : els.app.classList.contains('rail-off')), { hint: `${MOD}B` }),
   ];
-  for (const m of Object.values(MODES)) out.push(mk(m.icon, `Thinking: ${m.label}`, () => { S.mode = m.key; saveSettings(); renderPills(); toast('Thinking mode: ' + m.label); }, { desc: m.desc }));
+  for (const m of modesFor()) out.push(mk(m.icon, `Thinking: ${m.label}`, () => { S.mode = m.key; saveSettings(); renderPills(); toast('Thinking mode: ' + m.label); }, { desc: m.desc }));
   for (const [k, v] of Object.entries(WIKI_MODES)) out.push(mk('globe', `Search: ${v.label}`, () => { S.wiki = k; saveSettings(); renderPills(); toast('Look-ups: ' + v.label); }, { desc: v.desc }));
   for (const [k, v] of Object.entries(STYLES)) out.push(mk('text', `Answer style: ${v.label}`, () => { S.style = k; saveSettings(); renderPills(); toast('Answer style: ' + v.label); }, { desc: v.desc }));
   const c = current();
@@ -9112,13 +9268,14 @@ function renderSettingsModels() {
     const isLoaded = Brain.loadedKey === m.key && Brain.state === 'ready';
     const radio = h('input', { type: 'radio', name: 'model', value: m.key, id: 'model-' + m.key });
     radio.checked = S.model === m.key;
-    radio.addEventListener('change', () => {
+    radio.addEventListener('change', async () => {
       if (App.run) { toast('Wait for the answer to finish before switching models.'); renderSettingsModels(); return; }
+      if (!(await allowModel(m))) { renderSettingsModels(); return; }   // a model for strong computers asks first
       S.model = m.key; saveSettings(); renderModelChip(); renderBrainCard(); renderSettingsModels(); updateMeter();
       if (Brain.state === 'ready' || Brain.state === 'error') Brain.load(m.key).catch(() => {});
     });
     const facts = h('div', { class: 'facts' },
-      h('span', { text: `Download ${fmtMB(m.downloadMB)}` }), h('span', { text: `Graphics memory ≈ ${fmtMB(m.vramMB)}` }),
+      h('span', { text: `Download ${fmtMB(m.downloadMB)}` }), h('span', { text: `Graphics memory ≈ ${fmtMB(m.vramMB)}` }), m.needsGB ? h('span', { text: `Needs ${m.needsGB} GB of RAM` }) : null,
       saved ? h('span', { class: 'saved', text: isLoaded ? 'Running now' : 'Saved in this browser' }) : h('span', { text: 'Not downloaded' }));
     const act = h('div', { class: 'act' });
     if (saved) act.append(armedButton('Delete download', `Delete ${fmtMB(m.downloadMB)}?`, async () => {
@@ -9303,7 +9460,7 @@ function openSettings(focus) {
   // Answers and look-ups
   const row = (label, desc, control) => h('div', { class: 'set-row' }, h('div', { class: 'lt' }, h('b', { text: label }), desc ? h('span', { text: desc }) : null), control);
   b.append(sec('answers', 'Answers',
-    row('Thinking', 'How much Lumen thinks before it answers.', seg('Thinking', Object.values(MODES).map(m => [m.key, m.label]), S.mode, v => { S.mode = v; saveSettings(); renderPills(); })),
+    row('Thinking', 'How much Lumen thinks before it answers.', seg('Thinking', modesFor().map(m => [m.key, m.label]), S.mode, v => { S.mode = v; saveSettings(); renderPills(); })),
     row('Style', 'How answers are written.', seg('Answer style', Object.entries(STYLES).map(([k, v]) => [k, v.label]), S.style, v => { S.style = v; saveSettings(); renderPills(); })),
     row('Creativity', 'Precise is best for math and facts.', seg('Creativity', [['precise', 'Precise'], ['balanced', 'Balanced'], ['creative', 'Creative']], S.creativity, v => { S.creativity = v; saveSettings(); })),
     row('Check answers against sources', 'When an answer has a date, number or name that no source contains, Lumen writes it again once without it. It takes a little longer, only when needed.',
@@ -9491,7 +9648,14 @@ function openSettings(focus) {
   const rowsInfo = [['Graphics chip', Brain.gpu || (Brain.state === 'unsupported' ? 'Not available' : 'Unknown')], ['Speed mode', Brain.f16 ? 'Fast (16-bit)' : 'Compatible (32-bit)'],
     ['Memory in use', Brain.state === 'ready' ? `${Brain.ctx.toLocaleString('en-US')} tokens` : 'Model not running'], ['Engine', Brain.usesWorker ? 'Background worker' : Brain.state === 'ready' ? 'Main page' : '—'], ['Model files stored in', Brain.backend === 'indexeddb' ? 'IndexedDB' : 'Browser cache']];
   for (const [k, v] of rowsInfo) info.append(h('dt', { text: k }), h('dd', { text: v }));
-  b.append(sec('computer', 'This computer', info, Install.event ? h('div', { class: 'opt-row' }, h('button', { class: 'btn', type: 'button', html: `${icon('download', 15)}<span>Install Lumen as an app</span>`, onclick: () => Install.run() })) : null));
+  info.append(h('dt', { text: 'Restarts by the browser (last 24 hours)' }), h('dd', { text: String((S.crashes || []).filter(c => Date.now() - c.t < 864e5).length) }));
+  const ddKeep = h('dd', { text: 'Checking…' });
+  info.append(h('dt', { text: 'Saved model kept safe by the browser' }), ddKeep);
+  Promise.resolve().then(() => navigator.storage?.persisted?.()).then(v => { ddKeep.textContent = v ? 'Yes' : 'Not promised: the browser may delete it if the disk is almost full'; }).catch(() => { ddKeep.textContent = 'Unknown'; });
+  b.append(sec('computer', 'This computer', info,
+    h('div', { class: 'lrn-switch' }, h('div', { class: 'lt' }, h('b', { text: 'Keep the screen awake while the AI works' }), h('span', { text: 'A sleeping screen can make the browser stop the graphics chip in the middle of an answer. This only holds the screen on while Lumen is working, and it uses a little more battery.' })),
+      toggle('Keep the screen awake while the AI works', S.keepAwake, v => { S.keepAwake = v; saveSettings(); if (!v) Guard.lockOff(); else if (Guard.depth) Guard.lockOn(); })),
+    Install.event ? h('div', { class: 'opt-row' }, h('button', { class: 'btn', type: 'button', html: `${icon('download', 15)}<span>Install Lumen as an app</span>`, onclick: () => Install.run() })) : null));
 
   // Privacy
   const tbl = h('div', { class: 'priv' });
@@ -9812,9 +9976,14 @@ window.addEventListener('beforeunload', e => { if (Brain.state === 'loading' && 
 /* ---------- start ---------- */
 (async function start() {
   renderPills(); renderChips(); renderModelChip(); renderBrainCard(); renderThread(); renderTitle(); renderNet(); renderAttachments();
+  const crash = Guard.boot();   // did the last run end without a goodbye? (see 043-guard.js)
   await Store.open();
   App.chats = (await Store.all()).map(c => {
-    for (const m of c.messages) if (m.state === 'working') { m.state = m.content ? 'done' : 'stopped'; m.phase = ''; }
+    for (const m of c.messages) if (m.state === 'working') {
+      m.phase = '';
+      if (crash && m.role === 'assistant') { m.state = 'error'; m.error = crash.text; m.interrupted = crash.reason; }   // shows the reason and a “Try again” button
+      else m.state = m.content ? 'done' : 'stopped';
+    }
     return c;
   });
   renderSidebar(); renderThread(); renderTitle();
@@ -9826,13 +9995,19 @@ window.addEventListener('beforeunload', e => { if (Brain.state === 'loading' && 
   await Brain.detect();
   if (Brain.state === 'idle') {
     await Brain.refreshCached();
+    if (crash) toast(crash.phase === 'loading' ? 'The page stopped while the model was loading. ' + crash.text.split('. ').slice(1).join('. ') : 'The page was restarted by the browser. Details are in your last chat.', null, 9000);
+    else if (S.loaded[S.model] && !Brain.cached[S.model]) {
+      // it loaded here before, but the browser no longer has the files: it clears site data when the disk is nearly full, or when the person clears it
+      delete S.loaded[S.model]; saveSettings();
+      toast('The saved model is gone from this browser (browsers delete saved files when the disk is almost full or when site data is cleared). Press Download to get it again.', null, 12000);
+    }
     if (S.autoStart && Brain.cached[S.model] && Brain.state === 'idle') Brain.load(S.model).catch(() => {});
   }
   Lab.resume().catch(() => {});
   if (!narrow()) els.input.focus();
 })();
 try { window.hljs?.configure({ ignoreUnescapedHTML: true }); } catch {}
-window.__lumen = { WEBLLM_URL, Bigger, Teach, Ground, Usage, LEGAL, Care, openLegal, labelCopy, showReadBox, WikiPack, Speech, Dictation, Lab, LabScore, LAB_QUESTIONS, LAB_PUZZLES, openLab, App, Brain, S, Calc, Net, Cache, splitStream, looping, trimRepeat, thinkTitle, renderMarkdown, shouldLookUp, keywordQuery, entityQuery, terms, cleanAnswer,
+window.__lumen = { WEBLLM_URL, Guard, Bigger, Teach, Ground, Usage, LEGAL, Care, openLegal, labelCopy, showReadBox, WikiPack, Speech, Dictation, Lab, LabScore, LAB_QUESTIONS, LAB_PUZZLES, openLab, App, Brain, S, Calc, Net, Cache, splitStream, looping, trimRepeat, thinkTitle, renderMarkdown, shouldLookUp, keywordQuery, entityQuery, terms, cleanAnswer,
   localToolLines, timeNotes, unitNotes, fxIntent, weatherIntent, cryptoIntent, gather, selectDocText, chunkDoc, pickMode, pickPlaybook, planBudget, buildMessages, parseSlash, jsonFromText, STUDY_CHECK, readFileText, summarizeDocs, scheduleSummary, addMemory, Learn, Core, confidenceOf, Saver, Review, ROLES, setRole, getRole, solveParts, checkArithmetic, essayParagraphs, quoteInText, verifyComments, pickTop, runEssay, factCheck, claimsFrom, debateBalance, showFactCheck, chatToMarkdown, openSettings, submitText, send, wantDocs, plainText, slidesToHtml, chatToHtml, wikidataProps, webSearch, readPage, forkAt, switchFork, forkInfo, voteWorthy, finalAnswerOf, voteKey, voteTally, Examples, PROMPT_VERSIONS, basePrompt, EXAMPLES, systemPrompt, importBackup, Store, openChat, renderThread, saveChat, regenerate, resendEdited };
 </script>
 </body>

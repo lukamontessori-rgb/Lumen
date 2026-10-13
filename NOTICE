@@ -7,7 +7,7 @@ the Apache License, Version 2.0 (see the file LICENSE).
 This product loads and uses the following works, which keep their own licences
 (see THIRD_PARTY_NOTICES.md and the folder licenses/):
 
-  - Qwen3.5 language models by the Qwen team, Alibaba Cloud (Apache License 2.0)
+  - Qwen3.5 language models (0.8B, 2B, 4B and 9B) by the Qwen team, Alibaba Cloud (Apache License 2.0)
   - WebLLM by the MLC team (Apache License 2.0)
   - marked, DOMPurify, KaTeX, highlight.js, Mermaid, PDF.js
   - The fonts Figtree and Fraunces (SIL Open Font License 1.1, see the folder licenses/)

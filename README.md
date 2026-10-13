@@ -5,7 +5,7 @@ A private AI tutor that runs inside your web browser. The AI model (Qwen3.5) run
 ## What you need
 
 - **Google Chrome 113 or newer** (best), or **Safari on macOS 26 (Tahoe)** or newer.
-- About **1.1 GB** of free space for the recommended model (Qwen3.5 2B). The 4B model needs 2.4 GB, the 0.8B model 0.45 GB.
+- About **1.1 GB** of free space for the recommended model (Qwen3.5 2B). The 4B model needs 2.4 GB, the 0.8B model 0.45 GB, and the new 9B model (for strong computers only, about 16 GB of RAM) 5.1 GB.
 - Internet the first time (to download the model). After that the AI works offline. Look-ups, weather and news need the internet.
 
 ## Put it online with GitHub Pages (recommended)
@@ -47,6 +47,19 @@ A web page cannot retrain the AI model itself (that needs a big computer and a l
 - **It reads a little of the internet every day, and gets a bit smarter each time.** About once a day, while Lumen is open, it reads Wikipedia's news, today's featured article and the 8 most-read articles. For your favorite topics (up to 5) it saves two articles each and headlines, and for your number-one topic it does a longer read, so a later question gets more than the opening lines. It also **tries again for things it could not find**: if you asked about something and nothing was found, Lumen keeps the words for up to 14 days and looks again in the daily reading (articles and news appear over time). And it **refreshes older notes** that it used before (up to 5 a day), so they do not go stale. Press **Learn now** to do it right away.
 
 Every switch can be turned off, and "Forget what Lumen noticed" and "Empty the saved notes" erase what it learned. Facts about you (memory) can hold 60 items, and Lumen remembers up to 60 meanings you chose. The backup file includes your memory, your chosen meanings and saved notes.
+
+## What is new in version 17: a restart guard and a stronger model
+
+**The page that "reset by itself".** A page can stop without any error message: the browser closes a tab that uses a lot of graphics memory, puts it to sleep, or the graphics chip freezes. The page then starts again and the model looks "gone". This could not be reproduced without the real computer, so version 17 does four things that work for every cause:
+
+- **A restart note.** While the model loads or an answer is written, Lumen keeps a tiny note in this tab's session storage (model, time, whether the tab is in front). A normal close removes it. If it is still there at the next start, Lumen says what probably happened (tab put to sleep, tab in the background, or a crash, most likely graphics memory) and turns the unfinished answer into a message with a "Try again" button. After two crashes with the same model in one day it lowers the memory size by one step by itself and says so.
+- **The screen stays awake while the AI works** (Settings → Model → This computer; on by default; uses the Screen Wake Lock, which needs no permission). A sleeping screen can make the browser stop the graphics chip.
+- **A watchdog.** If no word arrives for 5 minutes at the start, or 2 minutes later on, Lumen stops the frozen engine (it no longer waits for it forever), loads the saved model again by itself, and shows "Try again". The same happens when the browser reports a lost graphics device. Time when the computer slept is not counted.
+- **A clear note if the saved model is really gone.** If the model loaded here before but the browser no longer has the files (browsers delete site data when the disk is almost full), Lumen says so instead of silently showing "Download". Settings also shows how many restarts happened in 24 hours and whether the browser promised to keep the files.
+
+**A stronger model: Qwen3.5 9B** (Apache 2.0, free, no sign-in). About 5.1 GB to download and 6.4 GB of graphics memory; made for 16 GB computers (for example a Mac with an M-series Pro chip). The browser cannot see more than 8 GB of RAM, so Lumen asks once before it is chosen. Under a weak answer, Lumen offers it after the 4B model, but only if you said your computer is strong.
+
+**Max thinking mode (9B only).** Plans the searches, reads up to 6 sources and 36,000 characters of files, thinks up to 3,000 tokens and can write up to 2,200. Choose it in the thinking menu, with `/max question`, or "Think the hardest (Max)" under an answer. It is the slowest and most careful mode. With any other model, Max quietly becomes Deep.
 
 ## What is new in version 16: the legal report
 
@@ -164,6 +177,7 @@ Never sent: your chats, files, memory, saved notes, name, rules or email address
 | The download stopped | Check the internet and click Try again. Finished parts are kept. |
 | The model sits at 0% or will not start | Lumen now notices this by itself. If nothing happens for a minute it restarts the loading once, then tells you what it found. The usual causes: **Lumen is open in another tab or window** (close the other one and reload), a **network that blocks the model server** (some school and work networks do; try your phone hotspot), or **not enough memory** (close other tabs and apps). If it still fails, press "Delete the saved model and start over". |
 | The model downloads again every time | Don't use a private window. Chrome may also clear site data when the disk is nearly full. |
+| The page restarted while the AI was thinking | Lumen now says why (tab put to sleep, background tab, or a crash from graphics memory). Close big tabs and apps, keep Lumen in front, and in Chrome add the site under Settings → Performance → "Always keep these sites active". Press Try again. |
 | A source shows an orange or red dot | Open Settings → Look-ups → Check connections. A source that fails three times is paused for a few minutes so it never slows an answer. |
 | Answers feel slow | Use Auto or Fast, close other tabs, or choose the 0.8B model. |
 
@@ -181,6 +195,7 @@ Never sent: your chats, files, memory, saved notes, name, rules or email address
 - Essay feedback is only as good as a 2B-parameter model reading your paragraph. The quote check proves a comment is about your real sentence; it does not prove the comment is right. Treat it as a second pair of eyes, not a teacher. It was tested with a pretend model, so it has not been scored on essays with planted mistakes yet.
 - The solver's calculator check only covers simple steps written as numbers with one sign, like `150 / 2 = 75`. It cannot check steps with letters (`3x = 15`), word problems in sentences, or a wrong method. So "all correct" means the sums are right, not that the whole solution is right. A small model can also ignore the six-part layout; Lumen asks once and then tells you what is missing. Roles are only instructions: a small model follows them most of the time, not always.
 - The source check looks at details, not meaning. It finds a year, a number or a name that no source contains. It cannot tell that a sentence is wrong when all its details are in the notes, and it misses a real name used in the wrong place. Numbers under 100 are not checked, and a correct detail that the AI knew but the notes did not contain is also reported (and may be taken out). Lumen was tested with a pretend AI model; how much it helps with the real model is something the Usage page will show you over a few days. I could not measure it myself.
+- The 9B model and Max mode are slower still (about half the speed of the 4B) and need about 6.4 GB of graphics memory. They were added without a real graphics chip to test on, so the real run on a strong computer is the true test. If the page stops, Lumen explains what probably happened, but it cannot always know the real cause.
 - The bigger model (4B) is slower and needs about 3.9 GB of graphics memory. On a Mac with 8 GB, close other tabs and apps first.
 - The AI model itself does not change. "Learning" means saved notes and habits, not a smarter brain, so a very small model can still misunderstand a note. If it gets something wrong, tell it with "remember that …" and check the sources.
 - "The most-known meaning" is a good guess, not a promise. It uses Wikipedia's page views, so a name that is suddenly in the news can win over an older, more famous meaning. That is why the other meanings are always one tap away. If Wikipedia's page-view data cannot be reached, Lumen falls back to the normal search order and still shows the other meanings.
@@ -194,11 +209,11 @@ Never sent: your chats, files, memory, saved notes, name, rules or email address
 - The legal pages were written from a checklist, not by a lawyer. They say what Lumen really does today, but if Lumen changes (a new look-up source, analytics, accounts) they must change too. The checklist itself lists questions for a Slovenian lawyer, for example whether a free hobby site needs a full postal address, and how the AI Act's marking rule works for plain text. Since version 16 the AI engine and the page libraries are in the folder `vendor/` and no public content network is used. I tested that with the real files in a real browser (the engine file loads, also in the background worker, and knows the Qwen3.5 models), but without a graphics chip I could not run a real model here, so the first start on your Mac is the real test. The name "Lumen" is also used by other companies (one of them a telecom company with an AI helper called "Ask Lumen"); that is low risk for a free hobby project, but rename it before you earn money or publish an app.
 - The help notice for self-harm uses a list of phrases. It is a safety net, not a safe system.
 
-Want smarter answers? Open Settings and switch to the 4B model (2.4 GB). It reasons better, but is about half as fast and needs more memory, so close other tabs first.
+Want smarter answers? Open Settings and switch to the 4B model (2.4 GB), or on a strong computer (16 GB of RAM) to the 9B model (5.1 GB). It reasons better, but is about half as fast and needs more memory, so close other tabs first.
 
 ## Credits
 
-- Qwen3.5 by Alibaba (Apache 2.0), WebLLM by MLC (Apache 2.0)
+- Qwen3.5 (0.8B, 2B, 4B, 9B) by Alibaba (Apache 2.0), WebLLM by MLC (Apache 2.0)
 - Fonts: Figtree and Fraunces (SIL Open Font License 1.1)
 - marked (MIT), DOMPurify (Apache 2.0 / MPL 2.0), KaTeX (MIT), highlight.js (BSD-3), Mermaid (MIT), PDF.js (Apache 2.0)
 - Facts from Wikipedia, Wiktionary, Wikivoyage and Simple English Wikipedia (CC BY-SA 4.0), Wikidata (CC0), OpenAlex (CC0). Text in an offline Wikipedia pack is from Wikipedia, available under the Creative Commons Attribution-ShareAlike 4.0 license.

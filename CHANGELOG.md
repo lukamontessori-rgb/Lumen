@@ -2,6 +2,12 @@
 
 One line per change: what changed, which file.
 
+- 2026-10-13: Restart guard: a note in session storage while the AI works; after a restart Lumen explains why (sleep, background, crash), turns the unfinished answer into "Try again", and after two foreground crashes lowers the memory size. `043-guard.js`, `220-start.js`, `020-settings.js`.
+- 2026-10-13: Watchdog for answers (5 min to the first word, 2 min between words, sleep time not counted); a frozen engine is ended (unload waits at most 4 s) and the saved model is loaded again by itself. `040-engine.js`.
+- 2026-10-13: Screen stays awake while the AI works (Screen Wake Lock, switch in Settings → Model → This computer); Settings shows restarts in 24 hours and whether the browser keeps the saved model; a clear note when a model that loaded before is gone from the browser. `043-guard.js`, `190-settings-ui.js`, `220-start.js`.
+- 2026-10-13: New model Qwen3.5 9B (Apache 2.0, 5.1 GB, about 6.4 GB graphics memory, for 16 GB computers) with a one-time "my computer is strong enough" question; offered after 4B under a weak answer only for people who said yes. `000-config.js`, `156-bigger.js`, `190-settings-ui.js`, `168-lab-ui.js`.
+- 2026-10-13: New Max thinking mode for the 9B model (plans searches, 6 sources, longest thinking), `/max`, "Think the hardest (Max)"; it becomes Deep with other models. `000-config.js`, `155-modes.js`, `160-turn.js`, `172-slash.js`, `178-msg-menu.js`, `110-menus.js`, `185-palette.js`.
+- 2026-10-13: Legal and about texts for the 9B model (Credits, About limits, Privacy note about the restart note, MODEL_LICENSES, THIRD_PARTY_NOTICES, NOTICE, README). `182-legal.js`, `licenses/`. Service worker cache name `lumen-shell-v17`. `sw.js`.
 - 2026-10-13: Legal report, gap 1: the libraries and the AI engine now come from the folder `vendor/` (marked, DOMPurify, KaTeX + fonts, highlight.js, PDF.js, Mermaid, WebLLM), no public content network; privacy page, Settings text, service worker (v16, five libraries pre-saved) and notices updated. `index.html`, `sw.js`, `vendor/`.
 - 2026-10-13: Opened as a file (file://), the AI engine cannot load from `vendor/`; Lumen now explains this and how to run `python3 -m http.server`. `index.html` (engine), `README.md`.
 - 2026-10-13: Legal report, gap 2: licence texts for the fonts Figtree and Fraunces (SIL OFL 1.1), notices for the libraries bundled inside Mermaid and WebLLM. `licenses/`, `vendor/`, `NOTICE`, `THIRD_PARTY_NOTICES.md`, Credits page.
