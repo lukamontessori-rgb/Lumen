@@ -14,7 +14,7 @@ This gives you a normal link. You download nothing yourself; the browser saves t
 
 1. On github.com, click **New repository**. Name it `lumen`, set it to **Public**, and click **Create repository**.
 2. On the new repository page, click **uploading an existing file**.
-3. Drag in all the files from this folder: `index.html`, `sw.js`, `manifest.webmanifest`, `icon.svg`, `icon-192.png`, `icon-512.png`, `core-facts.txt`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md`, and the `licenses` folder. Click **Commit changes**. (The `tools` folder is for your own Mac, to make the offline Wikipedia file. It is fine in the repository, but the page does not need it.)
+3. Drag in all the files from this folder: `index.html`, `sw.js`, `manifest.webmanifest`, `icon.svg`, `icon-192.png`, `icon-512.png`, `core-facts.txt`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md`, and the `licenses` folder and the `vendor` folder (the libraries and the AI engine; since version 16 the page needs them). Click **Commit changes**. (The `tools` folder is for your own Mac, to make the offline Wikipedia file. It is fine in the repository, but the page does not need it.)
 4. Go to **Settings → Pages**. Under "Branch", choose **main** and **/ (root)**, then click **Save**.
 5. Wait one or two minutes. Your link is `https://<your-username>.github.io/lumen/`.
 6. Open the link in Chrome and click **Download and start**.
@@ -25,7 +25,7 @@ Tip: in Chrome you can click the install icon in the address bar to add Lumen to
 
 ## Try it without GitHub
 
-Open `index.html` in **Google Chrome** (drag the file onto a Chrome window). It works, but the AI then runs on the main page thread, so it can feel a little less smooth, and start-up offline is less reliable. The GitHub Pages link is better.
+Since version 16, opening `index.html` by double-click (as a file) no longer starts the AI: Chrome does not let a page that was opened as a file load the engine file from the `vendor` folder, and Lumen then says so. Instead, open the Terminal, go to the Lumen folder (it must contain `index.html` and `vendor`), run `python3 -m http.server 8000`, and open `http://localhost:8000` in **Google Chrome**. Nothing leaves your computer for this. The GitHub Pages link is easier.
 
 ## It keeps learning
 
@@ -47,6 +47,21 @@ A web page cannot retrain the AI model itself (that needs a big computer and a l
 - **It reads a little of the internet every day, and gets a bit smarter each time.** About once a day, while Lumen is open, it reads Wikipedia's news, today's featured article and the 8 most-read articles. For your favorite topics (up to 5) it saves two articles each and headlines, and for your number-one topic it does a longer read, so a later question gets more than the opening lines. It also **tries again for things it could not find**: if you asked about something and nothing was found, Lumen keeps the words for up to 14 days and looks again in the daily reading (articles and news appear over time). And it **refreshes older notes** that it used before (up to 5 a day), so they do not go stale. Press **Learn now** to do it right away.
 
 Every switch can be turned off, and "Forget what Lumen noticed" and "Empty the saved notes" erase what it learned. Facts about you (memory) can hold 60 items, and Lumen remembers up to 60 meanings you chose. The backup file includes your memory, your chosen meanings and saved notes.
+
+## What is new in version 16: the legal report
+
+A legal checklist for an EU/Slovenian hobby project (12 October 2026) was compared with Lumen, point by point. Most points were already done in version 13 (AI notice, privacy, terms, credits, helpline, "Delete all my data", labels on copied and saved text). These were the gaps, now fixed:
+
+- **No content network any more.** The report says to bundle the libraries instead of loading them from a public CDN. marked, DOMPurify, KaTeX (with its fonts), highlight.js, PDF.js, Mermaid and the WebLLM engine are now unchanged copies in the folder `vendor/` (`vendor/README.md` says where each file comes from and how to update it). jsDelivr no longer sees anyone's internet address, and the privacy page and Settings say so. A saved chat page asks for the maths style only when the chat has maths, and from this site.
+- **Licences for what is now shipped.** Each `vendor/` folder has its library's licence. Mermaid and WebLLM are bundles with smaller libraries inside, so each has a `THIRD_PARTY_LICENSES.txt`.
+- **Fonts.** The two fonts built into the page (Figtree and Fraunces, SIL Open Font License 1.1) had no notice. Their licence texts are in `licenses/`, and they are named in `NOTICE`, `THIRD_PARTY_NOTICES.md` and the Credits page.
+- **Two safety lines for the AI.** Say that you have no reliable information about private people (anyone who is not a well-known public figure), and give general information only for health, law, money and safety, with a pointer to a doctor, lawyer or other qualified person. About 70 tokens more in every prompt.
+- **Data note.** `NOTICE` now says what is in `core-facts.txt` (short facts in our own words, no copied Wikipedia text) and that an offline Wikipedia pack you build is CC BY-SA 4.0 and stays so if you share it.
+- **Screen readers.** The chat is a labelled log that does not read out every word while it is written, and a hidden status line says "Lumen is working on an answer." and "Lumen finished the answer."
+- **Service worker.** The five small libraries are saved for offline use when the page is first installed, the others when first used. If a file is missing offline, the browser now gets an error for that file instead of the page.
+- **Cost.** Repository: about 11 MB more (engine 6.5 MB, Mermaid 2.6 MB, PDF reader 1.4 MB, the rest 1 MB). At page start the browser fetches only about 0.5 MB of it. The service worker keeps what was used (up to about 11 MB). Time: none noticeable; the files come from the same site instead of another one.
+- **One thing that is different.** A page opened by double-click (as a file) can no longer start the AI, because Chrome blocks the engine file there. Lumen now says so in plain words and shows the two-line way to start a small local server. The web link works as before.
+- **Not done on purpose.** A strict Content-Security-Policy: the AI engine runs WebAssembly and workers, and I cannot test the real engine here, so a wrong policy could stop it silently. Renaming "Lumen" (the report says it is fine for a free hobby project). A full postal address (the report says to ask a lawyer).
 
 ## What is new in version 15: fewer wrong answers, and a way to see it get better
 
@@ -78,7 +93,7 @@ These were added after reading a legal checklist for EU and Slovenian hobby proj
 - **"AI-generated by Lumen" labels.** Saved chats and answers, flashcards and quizzes, printouts, slide decks and the backup file always carry the label (and a machine-readable "generator" note). When you copy an answer, a short label is added at the end; you can switch that off in Settings → Data and privacy → What leaves this computer.
 - **Help if someone writes about hurting themselves.** If a message says things like "I want to die" or "hurt myself", a notice under the answer shows 112, Zaupni telefon Samarijan and Sopotnik (116 123) and TOM telefon (116 111). The check runs on your computer with a list of phrases; nothing is sent, and nothing is added to what the AI is told. It can miss a message, and it can show the notice when it is not needed.
 - **Before the download.** The model card says where the files come from (Hugging Face), that it sees your internet address, and to use Wi-Fi on a phone. Nothing is downloaded until you press Download.
-- **Licence files.** `LICENSE` (Apache 2.0 for Lumen's own code), `NOTICE`, `THIRD_PARTY_NOTICES.md` (the libraries and their licences) and `licenses/MODEL_LICENSES.md` (the Qwen3.5 models are Apache 2.0, checked on 12 October 2026 on the official pages).
+- **Licence files.** `LICENSE` (Apache 2.0 for Lumen's own code), `NOTICE`, `THIRD_PARTY_NOTICES.md` (the libraries and their licences), `licenses/MODEL_LICENSES.md` (the Qwen3.5 models are Apache 2.0, checked on 12 October 2026 on the official pages) and, since version 16, the font licences in `licenses/` and a licence file in every folder of `vendor/`.
 
 ## What is new in version 12
 
@@ -125,7 +140,7 @@ Your questions are answered on your own graphics chip. Only these short messages
 | Wikipedia (and Wiktionary, Wikivoyage) | Your search words |
 | Wikipedia news | Nothing about your question |
 | Offline Wikipedia copy | Nothing. It is searched on your computer, and Lumen never downloads it |
-| GitHub Pages, jsDelivr, Hugging Face | Nothing from you but your internet address, like any web site: GitHub hosts the page, jsDelivr delivers the AI engine and the page libraries, Hugging Face and GitHub deliver the model files when you press Download |
+| GitHub Pages, Hugging Face | Nothing from you but your internet address, like any web site: GitHub hosts the page, the AI engine and the page libraries (the folder `vendor/`), Hugging Face and GitHub deliver the model files when you press Download |
 | Dictation (only if you turn it on) | Nothing from Lumen. Private mode keeps your voice on your computer. Online mode: the browser sends your voice to its speech service (in Chrome, Google) |
 | Wikidata | The name of the article it found |
 | GDELT news | Your search words (news questions only) |
@@ -176,7 +191,7 @@ Never sent: your chats, files, memory, saved notes, name, rules or email address
 - The Test lab scores with simple code rules (a key word is there, the number is right, the layout is kept). It is a guide, not a grade: 50 questions are a small sample, and a difference of one question can be luck, so repeat a run before you decide. Speed numbers depend on what else your Mac is doing. The questions and the scoring were tested with a pretend model; the real numbers come from your own Mac.
 - Offline Wikipedia finds articles by their words (with a small fix for typing mistakes), not by meaning. A question that uses other words than the article may find nothing; in "First" mode Lumen then asks Wikipedia online, in "Only it" mode you get no Wikipedia notes. The pack is a snapshot: the date shown is the day you built the file. Importing takes minutes (in a test, 60,000 articles took about two and a half minutes) and the copy uses roughly four times the size of the pack file on disk (a 19 MB file used about 68 MB), plus 80 to 120 MB of extra memory while importing; afterwards it needs almost no memory. Removing the copy deletes it at once, but the browser may take a while to give the disk space back. The builder script and the importer were tested on a made-up Wikipedia file in the real format and on made-up packs of up to 60,000 articles, not on the real Wikipedia download, which cannot be reached from where Lumen was built. If Wikipedia's real file behaves differently, the script's "--selftest" and the error messages in Lumen say what went wrong.
 
-- The legal pages were written from a checklist, not by a lawyer. They say what Lumen really does today, but if Lumen changes (a new look-up source, analytics, accounts) they must change too. The checklist itself lists questions for a Slovenian lawyer, for example whether a free hobby site needs a full postal address, and how the AI Act's marking rule works for plain text. Lumen still loads its AI engine and page libraries from a public network (jsDelivr) instead of from this folder; the privacy page says so. Putting them in the repository is a bigger change that I did not make without testing it on a real laptop. The name "Lumen" is also used by other companies (one of them a telecom company with an AI helper called "Ask Lumen"); that is low risk for a free hobby project, but rename it before you earn money or publish an app.
+- The legal pages were written from a checklist, not by a lawyer. They say what Lumen really does today, but if Lumen changes (a new look-up source, analytics, accounts) they must change too. The checklist itself lists questions for a Slovenian lawyer, for example whether a free hobby site needs a full postal address, and how the AI Act's marking rule works for plain text. Since version 16 the AI engine and the page libraries are in the folder `vendor/` and no public content network is used. I tested that with the real files in a real browser (the engine file loads, also in the background worker, and knows the Qwen3.5 models), but without a graphics chip I could not run a real model here, so the first start on your Mac is the real test. The name "Lumen" is also used by other companies (one of them a telecom company with an AI helper called "Ask Lumen"); that is low risk for a free hobby project, but rename it before you earn money or publish an app.
 - The help notice for self-harm uses a list of phrases. It is a safety net, not a safe system.
 
 Want smarter answers? Open Settings and switch to the 4B model (2.4 GB). It reasons better, but is about half as fast and needs more memory, so close other tabs first.
@@ -184,6 +199,7 @@ Want smarter answers? Open Settings and switch to the 4B model (2.4 GB). It reas
 ## Credits
 
 - Qwen3.5 by Alibaba (Apache 2.0), WebLLM by MLC (Apache 2.0)
+- Fonts: Figtree and Fraunces (SIL Open Font License 1.1)
 - marked (MIT), DOMPurify (Apache 2.0 / MPL 2.0), KaTeX (MIT), highlight.js (BSD-3), Mermaid (MIT), PDF.js (Apache 2.0)
 - Facts from Wikipedia, Wiktionary, Wikivoyage and Simple English Wikipedia (CC BY-SA 4.0), Wikidata (CC0), OpenAlex (CC0). Text in an offline Wikipedia pack is from Wikipedia, available under the Creative Commons Attribution-ShareAlike 4.0 license.
 - Weather data by [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0), rates from the European Central Bank via Frankfurter, prices from CoinGecko, headlines from GDELT and Hacker News

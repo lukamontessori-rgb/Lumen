@@ -10,7 +10,14 @@ This product loads and uses the following works, which keep their own licences
   - Qwen3.5 language models by the Qwen team, Alibaba Cloud (Apache License 2.0)
   - WebLLM by the MLC team (Apache License 2.0)
   - marked, DOMPurify, KaTeX, highlight.js, Mermaid, PDF.js
+  - The fonts Figtree and Fraunces (SIL Open Font License 1.1, see the folder licenses/)
   - Text from Wikipedia (CC BY-SA 4.0), Wikidata (CC0), OpenAlex (CC0) and Open-Meteo (CC BY 4.0)
+
+About the data files: core-facts.txt holds short facts that were written for Lumen in the author's own words
+from public reference sources (the source of each fact is named on its line). It contains no copied Wikipedia text.
+Lumen does not ship any Wikipedia text. If you build an offline Wikipedia pack with tools/build_wiki_pack.py, that
+pack is made of Wikipedia text and stays under CC BY-SA 4.0 (the licence and credit are written in the pack file
+itself). If you share a pack, share it under CC BY-SA 4.0, credit Wikipedia, and say that the text was shortened.
 
 Lumen is not made by, connected to, or endorsed by Alibaba, the Wikimedia Foundation, or any
 other company named in these files.

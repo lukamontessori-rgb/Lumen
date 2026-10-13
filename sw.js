@@ -1,8 +1,10 @@
 // Lumen service worker: lets the page itself open without internet after the first visit.
 // The AI model files are cached separately by the WebLLM engine (in its own "webllm/..." caches).
-const SHELL = 'lumen-shell-v15';
-const CDN = 'lumen-cdn-v1';
-const SHELL_FILES = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
+// The page libraries are part of this site (the folder vendor/), so they are cached like the page itself.
+const SHELL = 'lumen-shell-v16';
+const SHELL_FILES = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png',
+  './vendor/marked-18.0.14/marked.umd.js', './vendor/dompurify-3.4.16/purify.min.js', './vendor/katex-0.18.9/katex.min.js',
+  './vendor/katex-0.18.9/katex.min.css', './vendor/highlight.js-11.12.0/highlight.min.js'];
 
 self.addEventListener('install', event => {
   event.waitUntil(
@@ -15,7 +17,7 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k.startsWith('lumen-') && k !== SHELL && k !== CDN).map(k => caches.delete(k))))
+      .then(keys => Promise.all(keys.filter(k => k.startsWith('lumen-') && k !== SHELL).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -33,19 +35,10 @@ self.addEventListener('fetch', event => {
           if (res.ok) { const copy = res.clone(); caches.open(SHELL).then(c => c.put(req, copy)); }
           return res;
         })
-        .catch(() => caches.match(req, { ignoreSearch: true }).then(hit => hit || caches.match('./index.html')))
+        .catch(() => caches.match(req, { ignoreSearch: true }).then(hit => hit || (req.mode === 'navigate' ? caches.match('./index.html') : Response.error())))
     );
     return;
   }
 
-  // Libraries on jsDelivr use fixed version numbers, so a saved copy never goes stale.
-  if (url.hostname === 'cdn.jsdelivr.net') {
-    event.respondWith(
-      caches.match(req).then(hit => hit || fetch(req).then(res => {
-        if (res.ok || res.type === 'opaque') { const copy = res.clone(); caches.open(CDN).then(c => c.put(req, copy)); }
-        return res;
-      }))
-    );
-  }
   // Everything else (model files, Wikipedia) goes straight to the network.
 });

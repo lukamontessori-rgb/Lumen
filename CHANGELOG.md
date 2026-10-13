@@ -2,6 +2,12 @@
 
 One line per change: what changed, which file.
 
+- 2026-10-13: Legal report, gap 1: the libraries and the AI engine now come from the folder `vendor/` (marked, DOMPurify, KaTeX + fonts, highlight.js, PDF.js, Mermaid, WebLLM), no public content network; privacy page, Settings text, service worker (v16, five libraries pre-saved) and notices updated. `index.html`, `sw.js`, `vendor/`.
+- 2026-10-13: Opened as a file (file://), the AI engine cannot load from `vendor/`; Lumen now explains this and how to run `python3 -m http.server`. `index.html` (engine), `README.md`.
+- 2026-10-13: Legal report, gap 2: licence texts for the fonts Figtree and Fraunces (SIL OFL 1.1), notices for the libraries bundled inside Mermaid and WebLLM. `licenses/`, `vendor/`, `NOTICE`, `THIRD_PARTY_NOTICES.md`, Credits page.
+- 2026-10-13: Legal report, gap 3: two safety lines in the system prompt (private people; health, law, money and safety). `index.html` (prompt).
+- 2026-10-13: Legal report, gap 4: data note in `NOTICE` (core facts, offline Wikipedia pack under CC BY-SA 4.0).
+- 2026-10-13: Legal report, gap 5: chat is a labelled log; a hidden status line tells screen readers when an answer starts and ends. `index.html`.
 - 2026-10-12: Version 15 docs and privacy text: README "What is new in version 15" and two new honest limits; the privacy page lists ratings, liked answers and corrections. `README.md`, `182-legal.js`, `index.html`. The page cache name is now `lumen-shell-v15`. `sw.js`.
 - 2026-10-12: Bigger-model hint: under a Low answer, one with details no source contains, or one marked wrong, "Answer again with Qwen3.5 4B" (2B for 0.8B) when the computer has enough memory; asks first if the model must be downloaded. `156-bigger.js`, `140-thread.js`, `index.html`.
 - 2026-10-12: Answer quality on the Usage page: checked answers, details all found, fixed by Lumen, marked good/wrong, corrections taught, 7-day comparison, "Checked OK" chart line and table columns, what Lumen has learned; per-day counters in the usage record. `036-usage.js`, `192-usage-ui.js`, `191-settings-pages.js`, `index.html`.

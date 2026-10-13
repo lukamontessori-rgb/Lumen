@@ -1,6 +1,8 @@
 # Third-party notices
 
-Lumen's own code is under the Apache License 2.0 (see `LICENSE`). Lumen loads the libraries below from a public content network (jsDelivr) when the page opens; it does not copy them into this repository. Their licences and copyright notices are listed here.
+Lumen's own code is under the Apache License 2.0 (see `LICENSE`). The libraries below are unchanged copies from their npm packages. They are in the folder `vendor/` of this repository and Lumen serves them from its own site (no public content network is used). Each folder in `vendor/` has the licence file of its library, and `vendor/README.md` lists the exact files and where they come from. Their licences and copyright notices are also listed here.
+
+Two of the libraries are bundles that contain smaller libraries inside them: the notices for those are in `vendor/mermaid-11.4.1/THIRD_PARTY_LICENSES.txt` (19 libraries, including d3, cytoscape, dayjs, lodash-es and marked) and `vendor/web-llm-0.2.85/THIRD_PARTY_LICENSES.txt` (the Apache TVM runtime, OpenAI library types, tslib and loglevel).
 
 Licence checks were made on 12 October 2026 against the exact package versions Lumen loads.
 
@@ -147,6 +149,15 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
+
+## Fonts (SIL Open Font License 1.1)
+
+The two fonts built into the page (`index.html` contains them as small web-font files) are free fonts under the SIL Open Font License, Version 1.1. The licence texts, with the copyright lines, are in the folder `licenses/`.
+
+- **Figtree**: Copyright 2022 The Figtree Project Authors (https://github.com/erikdkennedy/figtree). Licence: `licenses/OFL-Figtree.txt`.
+- **Fraunces**: Copyright 2020 The Fraunces Project Authors (https://github.com/undercasetype/Fraunces). Licence: `licenses/OFL-Fraunces.txt`.
+
+The fonts are not sold on their own. Lumen is not made by or endorsed by the font authors.
 
 ## Data and services
 
