@@ -2095,7 +2095,9 @@ const Brain = {
     });
     if (this.state === 'ready' && this.loadedKey === key && this.ctxWanted === ctxTarget(this.model(key))) return Promise.resolve();
     if (this.state === 'loading' && this.loadingKey === key) return this.loadPromise;
-    if (this.state === 'loading') return this.loadPromise.catch(() => {}).then(() => this.load(key));
+    // another model is still loading: a download is stopped (its finished files are kept) so the new choice starts at once
+    if (this.state === 'loading' && /^(Downloading|Checking)/.test(this.phase || 'Downloading') && !this.wasCached) this.cancelLoad();
+    else if (this.state === 'loading') return this.loadPromise.catch(() => {}).then(() => this.load(key));
     if (this.busy) return Promise.reject(new Error('Wait for the current answer to finish before switching models.'));
     this.loadPromise = this._load(key);
     return this.loadPromise;
@@ -2639,6 +2641,7 @@ const BROKEN_FILES_RE = /exceeds shard size|Tensor-cache record|shard size|check
 function friendlyError(e) {
   const msg = String(e?.message || e || 'Unknown error');
   if (e?.hung) return 'The AI stopped responding for a long time (the graphics chip may have frozen), so Lumen stopped it and is loading the model again from the saved files. Press “Try again” in a moment. If it keeps happening, choose a smaller memory size or a smaller model in Settings.';
+  if (e?.paused) return 'The model download was paused. Press Download (or Start) to carry on, then press “Try again”.';
   if (e?.space) return `There is not enough free storage for this model in this browser${e.need ? ` (it needs about ${fmtMB(e.need / 1e6)}${e.free != null ? `, and this site may use about ${fmtMB(e.free / 1e6)} more` : ''})` : ''}. Free some disk space, close private windows, delete a model you no longer use in Settings → Model, or pick a smaller model. Nothing was downloaded yet.`;
   if (e?.storage) return 'This browser saved the model files but gave back damaged copies, also the second way of saving them. Free some disk space, restart the browser, and press “Try again”. If it keeps happening, use Google Chrome.';
   if (e?.tooMany) return 'The saved model files were broken several times today, so Lumen stopped repairing them by itself to save your data. Open Settings → Model and press “Check the saved files”, or delete this model and download it again on a stable connection.';
@@ -7621,7 +7624,12 @@ async function ensureModel(run) {
   try {
     setWork(am, 'Getting the AI model ready');
     // Stop works right away, even while the model is still downloading (the download itself carries on).
-    await Promise.race([Brain.load(S.model), run.stopped$.then(() => { throw new Error('stopped'); })]);
+    // If the person switches to another model meanwhile, the question waits for that one instead.
+    for (let k = 0; ; k++) {
+      const want = S.model;
+      try { await Promise.race([Brain.load(want), run.stopped$.then(() => { throw Object.assign(new Error('stopped'), { byUser: true }); })]); break; }
+      catch (e) { if (e?.byUser || run.stopped || k >= 2 || !/^(stopped|cancelled)$/.test(e?.message || '')) throw e.byUser ? new Error('stopped') : e; if (S.model === want && Brain.state !== 'loading') throw Object.assign(new Error('paused'), { paused: true }); }
+    }
   } finally { Brain.listeners.delete(update); am.modelLoading = false; }
 }
 /* Start a run: the assistant message that fills in while Lumen works, and the Stop handle. */
@@ -8721,7 +8729,7 @@ function updateComposer() {
   const busy = !!App.run;
   els.main.classList.toggle('is-working', busy);
   els.send.classList.toggle('stop', busy);
-  els.send.innerHTML = busy ? icon('stop', 18) : icon('up', 18);
+  if (els.send.dataset.icon !== String(busy)) { els.send.dataset.icon = String(busy); els.send.innerHTML = busy ? icon('stop', 18) : icon('up', 18); }   // only when it changes, so a click is never lost
   els.send.setAttribute('aria-label', busy ? 'Stop' : 'Send');
   els.send.title = busy ? 'Stop (Esc)' : 'Send (' + (S.sendKey === 'mod' ? MOD + ' + Enter' : 'Enter') + ')';
   Dictation.sync(); updateVoiceBtn();
@@ -9701,6 +9709,17 @@ function showProfileMenu() {
 }
 function renderBrainCard() {
   const card = els.brainCard; const m = Brain.model(S.model);
+  // While a model downloads or loads, progress arrives many times a second. The card is only rebuilt when what it shows changes,
+  // otherwise the bar and the numbers are updated in place, so its buttons (Pause download) stay put and can be clicked.
+  const shape = [Brain.state, S.model, Brain.loadingKey, Brain.phase, !!Brain.retrying, !!(Brain.otherTab || Brain.stalled), Brain.cached[S.model], S.noAuto, Brain.error, Brain.stuck].join('|');
+  if (Brain.state === 'loading' && card.dataset.shape === shape && card.firstChild) {
+    const pct = Math.round(Brain.progress * 100), bar = card.querySelector('.bar'), meta = card.querySelectorAll('.progress-meta span');
+    if (bar) { bar.firstChild.style.width = pct + '%'; bar.setAttribute('aria-valuenow', String(pct)); }
+    if (meta[0]) meta[0].textContent = pct + '%';
+    if (meta[1]) meta[1].textContent = loadEta();
+    return;
+  }
+  card.dataset.shape = shape;
   card.classList.remove('warn');
   card.replaceChildren();
   card.hidden = Brain.state === 'ready';
@@ -9718,11 +9737,7 @@ function renderBrainCard() {
       const pct = Math.round(Brain.progress * 100);
       let eta = '';
       const lm = Brain.model(Brain.loadingKey || S.model);
-      if (Brain.phase === 'Downloading' && Brain.mb > 5 && Brain.elapsed > 3) {
-        const total = Brain.totalMB || lm.downloadMB, rate = Brain.speed || Brain.mb / Brain.elapsed, left = Math.max(0, (total - Brain.mb) / Math.max(0.01, rate));
-        eta = `${fmtMB(Brain.mb)} of ${fmtMB(total)} · ${rate >= 1 ? rate.toFixed(1) + ' MB/s' : Math.round(rate * 1000) + ' KB/s'} · about ${fmtSecs(left)} left`;
-      }
-      if (Brain.retrying) eta = `The connection dropped. Trying again (${Brain.retrying} of 5)…`;
+      eta = loadEta();
       card.append(h('div', { class: 'bi' },
         h('h3', { text: `${Brain.phase || 'Starting'}: ${lm.name}` }),
         h('p', { text: Brain.phase === 'Downloading' ? 'This happens only once. Every file is checked as it arrives, and if the connection drops it carries on where it stopped. You can type your question now; Lumen answers as soon as it is ready.' : /Checking|another way/.test(Brain.phase) ? 'Checking that every saved file is whole. Only a broken file is downloaded again.' : 'Starting the model on your graphics chip.' }),
@@ -9777,6 +9792,14 @@ const CHIP_CATS = [
 let chipOpen = '';
 /* The next smaller model (for a computer that could not hold this one). */
 const smallerModel = m => { const order = ['Qwen3.5-0.8B', 'Qwen3.5-2B', 'Qwen3.5-4B', 'Qwen3.5-9B'], i = order.indexOf(m.key); return i > 0 ? MODELS.find(x => x.key === order[i - 1]) : null; };
+/* "1.2 GB of 5.1 GB · 8.3 MB/s · about 8 min left" while downloading */
+function loadEta() {
+  if (Brain.retrying) return `The connection dropped. Trying again (${Brain.retrying} of 5)…`;
+  if (Brain.phase !== 'Downloading' || !(Brain.mb > 5) || !(Brain.elapsed > 3)) return '';
+  const lm = Brain.model(Brain.loadingKey || S.model);
+  const total = Brain.totalMB || lm.downloadMB, rate = Brain.speed || Brain.mb / Brain.elapsed, left = Math.max(0, (total - Brain.mb) / Math.max(0.01, rate));
+  return `${fmtMB(Brain.mb)} of ${fmtMB(total)} · ${rate >= 1 ? rate.toFixed(1) + ' MB/s' : Math.round(rate * 1000) + ' KB/s'} · about ${fmtSecs(left)} left`;
+}
 function renderChips() {
   els.chips.replaceChildren();
   const rk = getRole();
@@ -9819,7 +9842,13 @@ els.learnedBtn.addEventListener('click', () => Learn.showLearned());
 document.getElementById('reviewBtn').addEventListener('click', () => Review.show());
 Review.on(() => { if (!App.chats.length || !current()?.messages.length) renderChips(); });
 Learn.on(() => { if (!App.chats.length || !current()?.messages.length) renderChips(); });
-Brain.listeners.add(() => { renderModelChip(); renderBrainCard(); updateComposer(); if (els.settings.open) renderSettingsModels(); });
+let modelsShape = '';
+Brain.listeners.add(() => {
+  renderModelChip(); renderBrainCard(); updateComposer();
+  // the model list in Settings changes only when a model is saved, deleted, started or stopped (not on every progress step)
+  const sh = [Brain.state, Brain.loadedKey, S.model, ...MODELS.map(m => Brain.cached[m.key])].join('|');
+  if (els.settings.open && sh !== modelsShape) { modelsShape = sh; renderSettingsModels(); }
+});
 els.railModel.addEventListener('click', showProfileMenu);
 
 /* ----- internet status: the model works offline, but look-ups need the internet ----- */

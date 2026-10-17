@@ -699,6 +699,19 @@ for (const vp of [{ width: 1280, height: 860, name: 'desktop' }, { width: 390, h
   eq(errors, [], 'errors');
 });
 
+test('download: switching to another model during a download starts that one at once', async () => {
+  hits.clear();
+  faults.slowMs = 120;
+  const { page, errors } = await open();
+  await L(page, () => { window.__lumen.Brain.load('Qwen3.5-2B').catch(() => {}); });
+  await until(page, () => window.__lumen.Brain.phase === 'Downloading' && window.__lumen.Brain.mb > 0.1);
+  faults.slowMs = 0;
+  await page.click('#modelChip');
+  await page.click('.menu button:has-text("Qwen3.5 0.8B")');
+  await until(page, () => window.__lumen.Brain.state === 'ready' && window.__lumen.Brain.loadedKey === 'Qwen3.5-0.8B', null, 20000);
+  eq(errors, [], 'errors');
+});
+
 /* ===================== older features, end to end ===================== */
 import zlib from 'node:zlib';
 function tinyPdf(text) {
