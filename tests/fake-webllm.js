@@ -127,12 +127,21 @@ class FakeEngine {
     this.loaded = id; this.ctx = chatOpts?.context_window_size;
     log('loaded', id, backend, chatOpts?.context_window_size);
   }
-  async unload() { this.loaded = null; }
+  async unload() { this.loaded = null; this.conv = null; this.out = ''; }
   async interruptGenerate() { this.stop = true; }
+  /* Like WebLLM: the output of the last request, as the engine keeps it (with the empty thinking block when thinking was off). */
+  async getMessage() { return this.out || ''; }
   async _create(req) {
     if (!this.loaded) throw new Error('Model not loaded before calling chatCompletion');
     const t = T();
     (t.requests ||= []).push(req);
+    // WebLLM keeps the chat it last answered (all messages, plus its own output). If the new request is that chat plus one
+    // new user message, only the new message is read (the "KV cache" is reused); otherwise everything is read again.
+    const flat = ms => JSON.stringify(ms.map(m => [m.role, m.content]));
+    const reused = !!this.conv && flat(req.messages.slice(0, -1)) === flat(this.conv);
+    req.reused = reused;
+    if (reused) t.reused = (t.reused || 0) + 1; else t.fresh = (t.fresh || 0) + 1;
+    this.conv = null; this.out = '';
     if (t.requests.length > 400) t.requests.shift();
     const text = answerFor(req, t);
     if (text instanceof Error) throw text;
@@ -141,6 +150,9 @@ class FakeEngine {
     const delay = t.tokenDelay ?? 2;
     const pieces = text.match(/\S+\s*|\s+/g) || [''];
     const finishLen = /\[\[long\]\]/.test(lastUser(req)) || (req.max_tokens && pieces.length > req.max_tokens);
+    const prefix = req.extra_body?.enable_thinking === false ? '<think>\n\n</think>\n\n' : '';
+    let said = '';
+    const remember = () => { self.out = prefix + said; self.conv = [...req.messages.map(m => ({ role: m.role, content: m.content })), { role: 'assistant', content: self.out }]; };
     return {
       async *[Symbol.asyncIterator]() {
         let k = 0;
@@ -150,8 +162,10 @@ class FakeEngine {
           if (delay) await sleep(delay);
           if (t.hangAfter != null && k >= t.hangAfter) await new Promise(() => {});
           k++;
+          said += p;
           yield { choices: [{ delta: { content: p }, finish_reason: null }] };
         }
+        remember();
         yield { choices: [{ delta: {}, finish_reason: finishLen ? 'length' : 'stop' }] };
         const prompt = req.messages.reduce((s, m) => s + String(m.content || '').length, 0);
         yield { choices: [], usage: { prompt_tokens: Math.ceil(prompt / 4), completion_tokens: k, extra: { decode_tokens_per_s: 42 } } };

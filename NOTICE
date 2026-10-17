@@ -8,6 +8,7 @@ This product loads and uses the following works, which keep their own licences
 (see THIRD_PARTY_NOTICES.md and the folder licenses/):
 
   - Qwen3.5 language models (0.8B, 2B, 4B and 9B) by the Qwen team, Alibaba Cloud (Apache License 2.0)
+    (called Sparvelle, Lanthelle, Radivane and Solvarra in Lumen; the names were made up for Lumen, the models are unchanged)
   - WebLLM by the MLC team (Apache License 2.0)
   - marked, DOMPurify, KaTeX, highlight.js, Mermaid, PDF.js
   - Text from Wikipedia (CC BY-SA 4.0), Wikidata (CC0), OpenAlex (CC0) and Open-Meteo (CC BY 4.0)

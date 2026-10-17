@@ -163,7 +163,7 @@ test('unit: intents and slash parsing', async () => {
   eq(r.sl, { cmd: 'quiz', arg: 'volcanoes' }, 'slash');
   eq(r.sl2, null, 'unknown slash');
   eq(r.lu, [false, true, false], 'shouldLookUp');
-  eq(r.pm, ['fast', 'think', 'deep'], 'pickMode');
+  eq(r.pm, ['low', 'high', 'max'], 'pickMode');
 });
 test('unit: answer helpers', async () => {
   const { page } = await open();
@@ -501,7 +501,7 @@ test('setup: the first visit asks the questions and downloads the right model by
   await page.click('.su-card:has-text("Short")'); await page.click('.su-next');
   await page.click('.su-next');                                   // look-ups: keep the default
   const rec = await page.textContent('.su-sub');
-  assert(/Qwen3\.5 9B/.test(rec), 'recommends the 9B for a MacBook Pro with 16 GB and a Pro chip: ' + rec);
+  assert(/Solvarra \(Qwen3\.5 9B\)/.test(rec), 'recommends Solvarra, the 9B, for a MacBook Pro with 16 GB and a Pro chip: ' + rec);
   await page.click('.su-next');                                   // Download and start
   await until(page, () => window.__lumen.Brain.state === 'ready', null, 30000);
   const S = await L(page, () => { const s = window.__lumen.S; return { model: s.model, name: s.name, style: s.style, uses: s.uses, strong: s.strongPc, done: s.setupDone, dev: s.computer.device, ram: s.computer.ram }; });
@@ -718,6 +718,213 @@ test('download: picking another model just after one started (while it warms up)
   await page.click('#modelChip');
   await page.click('.menu button:has-text("Qwen3.5 0.8B")');
   await until(page, () => window.__lumen.Brain.state === 'ready' && window.__lumen.Brain.loadedKey === 'Qwen3.5-0.8B', null, 20000);
+  eq(errors, [], 'errors');
+});
+
+/* ===================== version 19: model names, effort levels, faster follow-ups, Claude-like answers ===================== */
+const openWith = async (settings, opts = {}) => {
+  const p = await newPage(opts);
+  await p.page.addInitScript(st => localStorage.setItem('lumen.settings', JSON.stringify(st)), { setupDone: 2, ...settings });
+  await p.page.goto(BASE);
+  await p.page.waitForFunction(() => window.__lumen && window.__lumen.Brain.state !== 'checking', null, { timeout: 15000 });
+  return p;
+};
+const lastReq = page => L(page, () => { const r = window.__fakeLLM.requests.filter(x => x.max_tokens !== 1 && !/^You write Wikipedia/.test(x.messages[0].content)).pop(); return { n: r.messages.length, think: r.extra_body?.enable_thinking, max: r.max_tokens, reused: r.reused, sys: r.messages[0].content, roles: r.messages.map(m => m.role), a1: r.messages[2]?.content || '' }; });
+
+test('model names: Sparvelle, Lanthelle, Radivane and Solvarra, with the real Qwen name beside them', async () => {
+  const { page, errors } = await open();
+  await page.click('#modelChip');
+  const items = await page.$$eval('.menu button', bs => bs.map(b => b.textContent));
+  const names = ['Sparvelle', 'Lanthelle', 'Radivane', 'Solvarra'];
+  eq(items.slice(0, 4).map(t => names.find(n => t.includes(n))), names, 'picker order, smallest first');
+  assert(items[0].includes('Qwen3.5 0.8B') && items[3].includes('Qwen3.5 9B'), 'real names shown: ' + items.join(' | '));
+  await page.keyboard.press('Escape');
+  await download(page);
+  const m = await ask(page, 'What is photosynthesis?');
+  eq(m.modelName, 'Lanthelle', 'saved with the answer');
+  const r = await lastReq(page);
+  assert(/running the Lanthelle model \(Lumen's name for Qwen3\.5 2B/.test(r.sys), 'the model knows its name');
+  assert(await page.$eval('.msg-ai.last .meta', e => e.title.includes('Lanthelle (Qwen3.5 2B)')), 'footer title names both');
+  const old = await L(page, () => [window.__lumen.modelByName('Qwen3.5 4B')?.key, window.__lumen.modelByName('Solvarra')?.key]);
+  eq(old, ['Qwen3.5-4B', 'Qwen3.5-9B'], 'answers saved with the old names still find their model');
+  eq(errors, [], 'errors');
+});
+
+test('effort: seven levels from Instant to Ultra, each changes how the answer is made', async () => {
+  const { page, errors } = await open();
+  await download(page);
+  await page.click('#modeBtn');
+  const labels = await page.$$eval('.menu button .t', b => b.map(x => x.textContent));
+  eq(labels, ['Auto', 'Instant', 'Low', 'Medium', 'High', 'Extra high', 'Max'], 'levels offered with Lanthelle (Ultra needs Solvarra)');
+  assert(await page.$$eval('.menu .effort-meter', x => x.length) === 6, 'each level shows its meter');
+  await page.click('.menu button:has-text("Instant")');
+  assert(/Instant/.test(await page.textContent('#modeBtn')), 'pill shows the level');
+  await L(page, () => { window.__lumen.S.wiki = 'off'; });
+  await ask(page, 'Explain gravity briefly please');
+  let r = await lastReq(page);
+  eq([r.think, r.max], [false, 1000], 'Instant: no thinking, short');
+  await L(page, () => { window.__lumen.S.mode = 'medium'; });
+  await ask(page, 'Why is the sky blue in the day?');
+  r = await lastReq(page);
+  eq([r.think, r.max], [true, 380 + 1300], 'Medium: a short thinking budget');
+  await L(page, () => { window.__lumen.S.mode = 'xhigh'; });
+  await ask(page, 'Why do cats purr when they are happy?');
+  r = await lastReq(page);
+  eq([r.think, r.max], [true, 1200 + 1600], 'Extra high: a longer thinking budget');
+  // Max answers a checkable puzzle three times
+  await L(page, () => { window.__fakeLLM.requests.length = 0; });
+  await ask(page, '/max how many legs do 3 spiders have in total?');
+  const m = await L(page, () => { const c = window.__lumen.App.chats.find(x => x.id === window.__lumen.App.currentId); return c.messages[c.messages.length - 1]; });
+  eq([m.mode, m.vote?.n], ['max', 3], 'Max: three tries');
+  // slash commands and the Ultra rule
+  const parsed = await L(page, () => ['instant', 'xhigh', 'ultra', 'deep', 'fast', 'think'].map(k => window.__lumen.modeKeyOf(k)));
+  eq(parsed, ['instant', 'xhigh', 'ultra', 'max', 'low', 'high'], 'old names map to the new levels');
+  await page.fill('#input', '/ultra prove that there are infinitely many primes'); await page.press('#input', 'Enter');
+  await page.waitForSelector('.toast:has-text("Ultra needs Solvarra")');
+  // Settings: a list of all levels
+  await L(page, () => window.__lumen.openSettings('general'));
+  await page.selectOption('#effortSel', 'high');
+  eq(await L(page, () => window.__lumen.S.mode), 'high', 'settings list sets the level');
+  eq(errors, [], 'errors');
+});
+
+test('effort: Ultra with Solvarra answers a checkable puzzle five times', async () => {
+  const { page, errors } = await openWith({ model: 'Qwen3.5-9B', strongPc: true, wiki: 'off' });
+  await download(page, 'Qwen3.5-9B');
+  await page.click('#modeBtn');
+  assert((await page.$$eval('.menu button .t', b => b.map(x => x.textContent))).includes('Ultra'), 'Ultra offered with Solvarra');
+  await page.click('.menu button:has-text("Ultra")');
+  const m = await ask(page, 'how many legs do 3 spiders have in total?');
+  eq([m.mode, m.vote?.n, m.modelName], ['ultra', 5, 'Solvarra'], 'five tries');
+  eq(errors, [], 'errors');
+});
+
+test('effort: saved settings and chats from older versions keep working', async () => {
+  for (const [old, want] of [['max', 'ultra'], ['deep', 'max'], ['fast', 'low'], ['auto', 'auto']]) {
+    const { page, context } = await openWith({ ver: 4, mode: old, promptVersion: 'v1' });
+    const got = await L(page, () => [window.__lumen.S.mode, window.__lumen.S.promptVersion]);
+    eq(got, [want, 'v4'], 'migrated ' + old);
+    await context.close();
+  }
+  const { page } = await openWith({ ver: 5, promptVersion: 'v2' });
+  eq(await L(page, () => window.__lumen.S.promptVersion), 'v2', 'a prompt version someone chose later stays');
+});
+
+test('Auto learns: answers of one kind rated wrong at a level get more effort next time', async () => {
+  const { page, errors } = await open();
+  const unit = await L(page, () => {
+    const { EffortLearn: E } = window.__lumen; E.reset();
+    const mk = (id, lvl, kind = 'math') => ({ id, auto: true, level: lvl, effortKind: kind });
+    const out = [E.adjust('math', 4, 6)];
+    E.note(mk('a', 4), 0); out.push(E.adjust('math', 4, 6));
+    E.note(mk('b', 4), 0); out.push(E.adjust('math', 4, 6));        // two bad: one level up
+    E.note(mk('c', 5), 0); E.note(mk('d', 5), 0); out.push(E.adjust('math', 4, 6));   // bad again one level up: two levels
+    E.note(mk('e', 6), 0); E.note(mk('f', 6), 0); out.push(E.adjust('math', 4, 6));   // never more than two levels up
+    E.note(mk('b', 4), null); out.push(E.adjust('math', 4, 6));     // a rating taken back
+    E.note(mk('g', 4), 1); E.note(mk('h', 4), 1); E.note(mk('i', 4, 'code'), 0); out.push(E.adjust('math', 4, 6), E.adjust('code', 4, 6));
+    E.note({ id: 'x', auto: false, level: 4, effortKind: 'math' }, 0);   // a level you chose yourself is not learned from
+    return out.concat(E.summary().length);
+  });
+  eq(unit, [4, 4, 5, 6, 6, 4, 4, 4, 1], 'learning rules (the summary: when Auto first picks Extra high for math, it now uses Max)');
+  await download(page);
+  await L(page, () => { window.__lumen.S.wiki = 'off'; window.__lumen.EffortLearn.reset(); });
+  const q = 'Please explain to me the main causes of the first world war';
+  let m = await ask(page, q);
+  eq([m.auto, m.mode, m.effortKind], [true, 'high', 'general'], 'Auto chose High');
+  await L(page, () => { const { EffortLearn: E } = window.__lumen; E.note({ id: 'p', auto: true, level: 4, effortKind: 'general' }, 0); E.note({ id: 'q', auto: true, level: 4, effortKind: 'general' }, 0); });
+  m = await ask(page, q + ' and the second one');
+  eq([m.mode, m.learned], ['xhigh', true], 'Auto now uses Extra high for this kind');
+  // thumbs down on an Auto answer is learned from
+  await page.click('.msg-ai.last button[aria-label="Wrong answer"]');
+  await page.waitForSelector('#teach[open]');
+  await page.click('#teachForm button[type="submit"]');
+  await until(page, () => JSON.parse(localStorage.getItem('lumen.effort')).kinds.general.length === 3, null, 5000);   // the rating was noted
+  await L(page, () => window.__lumen.openSettings('memory'));
+  eq(errors, [], 'errors');
+});
+
+test('faster follow-ups: the engine keeps the chat and reads only the new question', async () => {
+  const { page, errors } = await openWith({ wiki: 'off', mode: 'low' });
+  await download(page);
+  await L(page, () => { window.__fakeLLM.reused = 0; });
+  const a1 = await ask(page, 'Tell me a fun fact about otters');
+  let r = await lastReq(page);
+  eq([r.reused, r.n], [false, 2], 'the first question is read in full');
+  await ask(page, 'And one more about their fur');
+  r = await lastReq(page);
+  eq([r.reused, r.roles], [true, ['system', 'user', 'assistant', 'user']], 'the follow-up reuses the chat');
+  assert(r.a1.startsWith('<think>\n\n</think>\n\n') && r.a1.includes('test answer'), 'the earlier answer is sent exactly as the engine keeps it');
+  const shown = await L(page, () => { const c = window.__lumen.App.chats.find(x => x.id === window.__lumen.App.currentId); return [c.messages[1].content, c.messages[3].replay]; });
+  assert(!/<think>/.test(shown[0]) && shown[0] === a1.content, 'what you see is unchanged');
+  eq(shown[1], true, 'marked as a faster follow-up');
+  // after an answer that thought first, the chat is built afresh (old reasoning is never shown to the model again)
+  await L(page, () => { window.__lumen.S.mode = 'high'; });
+  await ask(page, 'Why do otters hold hands?');
+  await L(page, () => { window.__lumen.S.mode = 'low'; });
+  await ask(page, 'Thanks, and what do they eat?');
+  r = await lastReq(page);
+  eq(r.reused, false, 'no replay after thinking');
+  // a different chat never reuses another chat
+  await page.click('#newChat');
+  await ask(page, 'Hello there, who are you?');
+  r = await lastReq(page);
+  eq(r.reused, false, 'a new chat starts fresh');
+  eq(errors, [], 'errors');
+});
+
+test('faster follow-ups: two sets of notes are never mixed, and the facts check still runs', async () => {
+  const { page, errors } = await openWith({ mode: 'low' });
+  await download(page);
+  await ask(page, 'What is photosynthesis?');
+  await ask(page, 'Thanks. Who discovered it?');
+  const r = await lastReq(page);
+  eq(r.reused, false, 'both turns looked things up: built afresh');
+  const notes = await L(page, () => { const rq = window.__fakeLLM.requests.filter(x => x.max_tokens !== 1).pop(); return rq.messages.map(m => (String(m.content).match(/<notes>/g) || []).length).reduce((a, b) => a + b, 0); });
+  eq(notes, 1, 'only the new notes are in the prompt');
+  eq(errors, [], 'errors');
+});
+
+test('Claude-like instructions: the default for new and older settings, and the model is told its name', async () => {
+  const { page, errors } = await open();
+  await download(page);
+  const v = await L(page, () => [window.__lumen.S.promptVersion, Object.keys(window.__lumen.PROMPT_VERSIONS || {})]);
+  eq(v[0], 'v4', 'v4 is the default');
+  await L(page, () => { window.__lumen.S.wiki = 'off'; });
+  await ask(page, 'Hi, can you help me with my homework?');
+  const r = await lastReq(page);
+  for (const want of ['Answer in the language the user writes in', 'No flattery', 'ask one short question', 'If the user says something that is not true', 'Do not lecture']) assert(r.sys.includes(want), 'prompt has: ' + want);
+  eq(errors, [], 'errors');
+});
+
+test('legal pages: names, effort, AI transparency, what is stored, AI Act note, and no other company\'s product named', async () => {
+  const { page, errors } = await open();
+  const text = async k => { await L(page, k => window.__lumen.openLegal(k), k); await page.waitForSelector('#legal[open]'); return page.textContent('#legalBody'); };
+  const about = await text('about');
+  for (const w of ['You are chatting with an AI, not a human', 'Lanthelle, which is Lumen’s name for Qwen3.5 2B', 'Sparvelle: Qwen3.5 0.8B', 'Solvarra: Qwen3.5 9B', 'made up for Lumen', 'without changing or retraining', 'Instant, Low, Medium, High, Extra high, Max and Ultra', 'How Lumen shows that it is an AI', 'machine-readable']) assert(about.includes(w), 'About has: ' + w);
+  const priv = await text('privacy');
+  for (const w of ['What Auto learned about effort', 'never written to disk', 'Delete all my data']) assert(priv.includes(w), 'Privacy has: ' + w);
+  const terms = await text('terms');
+  assert(terms.includes('Article 50(4)') && terms.includes('Sparvelle, Lanthelle, Radivane and Solvarra'), 'Terms');
+  const credits = await text('credits');
+  assert(credits.includes('Radivane (Qwen3.5 4B)') && credits.includes('not Alibaba’s'), 'Credits');
+  for (const t of [about, priv, terms, credits]) assert(!/Claude|Anthropic/.test(t), 'no other product named on the legal pages');
+  const visible = await L(page, () => document.body.innerText + [...document.querySelectorAll('[title],[aria-label],option')].map(e => (e.title || '') + (e.getAttribute('aria-label') || '') + (e.textContent || '')).join(' '));
+  assert(!/Claude|Anthropic/.test(visible), 'the app never names another company\'s assistant');
+  eq(errors, [], 'errors');
+});
+
+test('saved files say they were made by an AI, for people and for software', async () => {
+  const { page, errors } = await open();
+  await download(page);
+  await L(page, () => { window.__lumen.S.wiki = 'off'; });
+  await ask(page, 'Tell me about otters');
+  const grab = async run => { const [d] = await Promise.all([page.waitForEvent('download'), run()]); const fs = await import('node:fs'); return fs.readFileSync(await d.path(), 'utf8'); };
+  const ansMd = await grab(async () => { await page.click('.msg-ai.last button[aria-label="More"]'); await page.click('.menu button:has-text("Save as a file")'); });
+  assert(ansMd.startsWith('---\ngenerator: "Lumen"\nai_generated: true\ndigital_source_type: "http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia"'), 'answer front matter: ' + ansMd.slice(0, 200));
+  const chatMd = await grab(async () => { await page.fill('#input', '/export'); await page.press('#input', 'Enter'); });
+  assert(chatMd.startsWith('---\ngenerator: "Lumen"\nai_generated: "partly (the answers)"'), 'chat export front matter: ' + chatMd.slice(0, 200));
+  assert(chatMd.includes('compositeWithTrainedAlgorithmicMedia') && chatMd.includes('ai_model: "Lanthelle (Qwen3.5 2B)"'), 'IPTC code and model');
+  assert(/AI-generated by Lumen\. It can be wrong\./.test(chatMd), 'visible label stays');
   eq(errors, [], 'errors');
 });
 

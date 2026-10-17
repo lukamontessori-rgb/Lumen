@@ -5,7 +5,7 @@ A private AI tutor that runs inside your web browser. The AI model (Qwen3.5) run
 ## What you need
 
 - **Google Chrome 113 or newer** (best), or **Safari on macOS 26 (Tahoe)** or newer.
-- About **1.1 GB** of free space for the recommended model (Qwen3.5 2B). The 4B model needs 2.4 GB, the 0.8B model 0.45 GB, and the new 9B model (for strong computers only, about 16 GB of RAM) 5.1 GB.
+- About **1.1 GB** of free space for the recommended model, **Lanthelle** (Qwen3.5 2B). **Radivane** (Qwen3.5 4B) needs 2.4 GB, **Sparvelle** (Qwen3.5 0.8B) 0.45 GB, and **Solvarra** (Qwen3.5 9B, for strong computers only, about 16 GB of RAM) 5.1 GB.
 - Internet the first time (to download the model). After that the AI works offline. Look-ups, weather and news need the internet.
 
 ## Put it online with GitHub Pages (recommended)
@@ -48,6 +48,29 @@ A web page cannot retrain the AI model itself (that needs a big computer and a l
 
 Every switch can be turned off, and "Forget what Lumen noticed" and "Empty the saved notes" erase what it learned. Facts about you (memory) can hold 60 items, and Lumen remembers up to 60 meanings you chose. The backup file includes your memory, your chosen meanings and saved notes.
 
+## What is new in version 19: model names, effort levels, faster follow-ups and Claude-like answers
+
+**The models have names.** Like the big assistants, the four models now have their own names, made up for Lumen (a web search found no product using them), from a small light to the sun:
+
+| Name | Model | For |
+|---|---|---|
+| **Sparvelle** (a spark) | Qwen3.5 0.8B | Quickest, simple questions |
+| **Lanthelle** (a lantern) | Qwen3.5 2B | Everyday, the recommended one |
+| **Radivane** (radiance) | Qwen3.5 4B | Smarter, about half as fast |
+| **Solvarra** (the sun) | Qwen3.5 9B | Strongest, for 16 GB computers |
+
+They are only names: the models are the same Qwen3.5 models as before, unchanged, and the real name is always shown next to Lumen's name (model picker, Settings, About and Credits). The AI also knows its name: ask "which model are you?".
+
+**Effort, from Instant to Ultra.** The thinking button in the message box is now an effort setting with seven levels and a small meter: **Instant** (answers at once, reads the least), **Low** (no thinking step), **Medium** (thinks for a moment), **High** (thinks it through), **Extra high** (plans its searches, reads more, thinks longer), **Max** (long thinking, many sources, and three tries for checkable answers) and **Ultra** (Solvarra only: the longest thinking, the most sources and five tries). **Auto** picks the level for each question. Also in Settings → General → Effort, in the command palette, and as `/instant`, `/low`, `/medium`, `/high`, `/xhigh`, `/max` and `/ultra`. Old settings move over by themselves (Fast became Low, Think became High, Deep became Max, and the old 9B-only Max is now Ultra).
+
+**Auto gets better with use.** When answers of one kind (math, code, facts, writing ...) are rated wrong at a level, or contain details none of the sources has, Auto gives that kind one more level of effort from then on (at most two levels more, never above Max). It is all on your computer; "What Lumen has learned" shows it and can reset it.
+
+**Faster follow-ups, same answers.** The AI engine keeps the chat it just answered in the graphics chip's memory. Before, Lumen rebuilt the chat a little differently every turn, so the engine had to read the whole chat again for every question. Now, when you ask a follow-up in the same chat, Lumen sends exactly what the engine already holds plus your new question, so it reads only the new question and the answer starts sooner (most of all with Solvarra, which reads slowly). Nothing about the answer changes; when it cannot work exactly (after an answer that thought first, when both questions looked things up, or when the chat is too long), Lumen builds the chat as before.
+
+**Answers in the style of Claude.** New base instructions (Settings → Advanced, "v4", now the default): warm and direct, no flattery or filler, answers in the language you write in, the most important thing first, prose before lists, one short question when a request is unclear, says so kindly when you are wrong and admits its own mistakes, and does not lecture.
+
+**Legal pages checked and updated.** About explains the model names, the effort levels and how Lumen shows that it is an AI; Privacy lists what Auto learns and the chat memory of the engine; Terms mention the AI Act rule for publishing AI text; Credits, NOTICE and the licence files list the names. Saved Markdown files now also carry a machine-readable note that they were made by an AI (front matter with the IPTC code), and saved web pages carry it in meta tags.
+
 ## What is new in version 18: a new look, a setup for each computer, and a fixed 9B download
 
 **The 9B download loop is fixed.** The problem: after a long download Lumen said a file was broken, deleted the whole model, downloaded all 5.1 GB again, and could do that over and over (also every time the page opened, because the model still looked "saved"). Now Lumen downloads the model files itself and checks every one:
@@ -76,7 +99,7 @@ Every switch can be turned off, and "Forget what Lumen noticed" and "Empty the s
 
 **Fixed glitches** found by the new tests: "5 foots" (now "5 feet", "10 inches", "metres per second"); "what day is 25 December 2026?" answered with today's date; a short one-page PDF was refused as "a scan"; buttons on the download card could miss a click while the progress moved; backups now include projects and styles and never temporary chats.
 
-**Tests.** The folder `tests/` has 58 end-to-end tests (`node tests/run.mjs`, see `tests/README.md`). They drive the real page in Chromium with a pretend AI engine that reads and checks model files exactly the way WebLLM does, and pretend versions of Hugging Face and Wikipedia, so they need no graphics chip and no internet.
+**Tests.** The folder `tests/` has 68 end-to-end tests (`node tests/run.mjs`, see `tests/README.md`). They drive the real page in Chromium with a pretend AI engine that reads and checks model files exactly the way WebLLM does, and pretend versions of Hugging Face and Wikipedia, so they need no graphics chip and no internet.
 
 ## What is new in version 17: a restart guard and a stronger model
 
@@ -212,7 +235,7 @@ Never sent: your chats, files, memory, saved notes, name, rules or email address
 | I don't know which model fits my computer | Profile menu (bottom left) → **Set up Lumen for this computer**, or the model button in the message box → **Which model fits my computer?** |
 | The page restarted while the AI was thinking | Lumen now says why (tab put to sleep, background tab, or a crash from graphics memory). Close big tabs and apps, keep Lumen in front, and in Chrome add the site under Settings → Performance → "Always keep these sites active". Press Try again. |
 | A source shows an orange or red dot | Open Settings → Look-ups → Check connections. A source that fails three times is paused for a few minutes so it never slows an answer. |
-| Answers feel slow | Use Auto or Fast, close other tabs, or choose the 0.8B model. |
+| Answers feel slow | Use Auto or a lower effort (Instant or Low), close other tabs, or choose Sparvelle (the smallest model). Follow-up questions in the same chat are faster than the first one. |
 
 ## Honest limits
 
@@ -243,9 +266,13 @@ Never sent: your chats, files, memory, saved notes, name, rules or email address
 - The help notice for self-harm uses a list of phrases. It is a safety net, not a safe system.
 - Version 18's new downloader was tested with the real WebLLM storage code, real browser storage and a pretend model server, including cut connections, empty saved files, a full disk, a server without byte ranges and a browser that damages files. The real Qwen3.5 9B files could not be downloaded where Lumen was built (Hugging Face could not be reached from there), so the first real download on your Mac is the final test. If a file still cannot be saved, Lumen now says exactly what happened instead of starting over.
 - The setup's model advice is a rule of thumb from the memory and chip you choose. A browser cannot see how much memory a computer has, and other open apps use memory too, so a model marked "fits" can still be too big on a busy computer. Lumen then says so and offers a smaller one.
+- The model names were checked with web searches (no product or app with these names came up), not in a trademark register. Before you earn money with Lumen or publish it in an app store, search the EU (TMview) and US registers.
+- Faster follow-ups were tested with a pretend engine that copies how WebLLM 0.2.85 decides to reuse the chat (the same comparison of messages). The real speed-up depends on your computer; the Usage page shows the speed.
+- The effort levels and what Auto learns change how long and how carefully the model works, not how smart it is. Ultra on Solvarra can take minutes for one answer.
+- The AI Act asks makers of AI systems that write text to mark it in a machine-readable way "as far as technically feasible" (Article 50(2), from 2 August 2026, with time until 2 December 2026 for systems already online before that). Lumen marks saved files and labels copied text, but it does not hide a watermark in the wording itself: that would need to change how every word is picked, which can make small models' answers worse and slower, and it needs a detection service. Whether that is enough for a free hobby project is a question for a lawyer.
 - The look follows Claude's style, but Lumen is a separate hobby project. It is not made by, connected to or endorsed by Anthropic, and it uses its own name and mark.
 
-Want smarter answers? Open Settings and switch to the 4B model (2.4 GB), or on a strong computer (16 GB of RAM) to the 9B model (5.1 GB). It reasons better, but is about half as fast and needs more memory, so close other tabs first.
+Want smarter answers? Pick a higher effort, or switch to Radivane (Qwen3.5 4B, 2.4 GB), or on a strong computer (16 GB of RAM) to Solvarra (Qwen3.5 9B, 5.1 GB). It reasons better, but is about half as fast and needs more memory, so close other tabs first.
 
 ## Credits
 

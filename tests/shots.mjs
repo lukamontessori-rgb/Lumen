@@ -57,6 +57,10 @@ const all = {
   phonePanel: { width: 390, height: 844, setup: async p => { await chat(p); await p.evaluate(() => window.__lumen.Artifact.open({ title: 'Flowchart', lang: 'mermaid', code: 'graph TD\n  A[Question] --> B{Look it up?}\n  B -->|yes| C[Wikipedia]\n  B -->|no| D[Answer]' })); await p.waitForTimeout(1500); } },
   phoneMenu: { width: 390, height: 844, setup: async p => { await p.click('#menuBtn'); } },
   darkHomeMenu: { dark: true, setup: async p => { await p.click('#modelChip'); } },
+  effortMenu: { setup: async p => { await p.click('#modeBtn'); } },
+  legalAbout: { setup: async p => { await p.evaluate(() => window.__lumen.openLegal('about')); } },
+  modelMenu: { setup: async p => { await p.click('#modelChip'); } },
+  effortDark: { dark: true, setup: async p => { await p.evaluate(() => { window.__lumen.S.mode = 'xhigh'; }); await p.click('#modeBtn'); } },
 };
 for (const [k, v] of Object.entries(all)) if (!only.length || only.includes(k)) { try { await shot(k, v); console.log('saved', k); } catch (e) { console.log('failed', k, e.message); } }
 await browser.close(); await server.close();

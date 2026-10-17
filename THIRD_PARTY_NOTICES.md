@@ -11,7 +11,7 @@ Licence checks were made on 12 October 2026 against the exact package versions L
 - **WebLLM** (`@mlc-ai/web-llm` 0.2.85), by the MLC team. https://github.com/mlc-ai/web-llm
 - **PDF.js** (`pdfjs-dist` 3.11.174), by Mozilla and contributors. https://github.com/mozilla/pdf.js
 - **DOMPurify** (3.4.16), by Cure53 and contributors. Offered under Apache License 2.0 or Mozilla Public License 2.0; Lumen uses it under Apache 2.0. https://github.com/cure53/DOMPurify
-- **Qwen3.5** (0.8B, 2B, 4B and 9B models), by the Qwen team, Alibaba Cloud. Model cards on https://huggingface.co/Qwen state `License: apache-2.0` (checked 12 October 2026 for 0.8B, 2B and 4B, and 13 October 2026 for 9B). See `licenses/MODEL_LICENSES.md`.
+- **Qwen3.5** (0.8B, 2B, 4B and 9B models), by the Qwen team, Alibaba Cloud. Model cards on https://huggingface.co/Qwen state `License: apache-2.0` (checked 12 October 2026 for 0.8B, 2B and 4B, and 13 October 2026 for 9B). In Lumen they are called Sparvelle (0.8B), Lanthelle (2B), Radivane (4B) and Solvarra (9B); these names were made up for Lumen and the models are used unchanged. See `licenses/MODEL_LICENSES.md`.
 
 ## MIT and BSD licences
 

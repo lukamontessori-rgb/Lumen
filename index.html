@@ -362,6 +362,11 @@ dialog.sheet::backdrop { background: rgba(20, 20, 19, .4); }
 .model-opt:has(input:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface)); }
 .model-opt input { margin-top: 4px; accent-color: var(--accent); }
 .model-opt .nm { font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.model-opt .nm .base { font-weight: 400; font-size: 12.5px; color: var(--muted); }
+.effort-meter { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; vertical-align: middle; }
+.effort-meter i { display: block; width: 3px; border-radius: 1px; background: var(--line-2); }
+.effort-meter i.on { background: var(--accent); }
+.menu .mi .effort-meter { height: 16px; }
 .tag { font: 600 10.5px/1 var(--font-ui); letter-spacing: .04em; text-transform: uppercase; padding: 4px 7px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); }
 .tag.lamp { background: var(--lamp-soft); color: var(--lamp); }
 .tag.plain { background: var(--surface-2); color: var(--muted); }
@@ -1169,39 +1174,65 @@ dialog.setup::backdrop { background: color-mix(in srgb, var(--bg) 70%, rgba(20, 
 
 const WEBLLM_URL = new URL('vendor/web-llm-0.2.85/index.js', location.href).href;   // our own copy (see vendor/README.md); the background worker needs a full address
 
+/* Lumen's own names for the four Qwen3.5 models (made up for Lumen, from a small light to the sun): Sparvelle (a spark),
+   Lanthelle (a lantern), Radivane (radiance) and Solvarra (the sun). The models themselves are Qwen3.5 by the Qwen team
+   at Alibaba Cloud, unchanged (Apache 2.0); `base` is their real name and is shown next to Lumen's name. */
 const MODELS = [
-  { key: 'Qwen3.5-2B', name: 'Qwen3.5 2B', tag: 'Recommended', tagClass: '',
-    desc: 'The best balance for a MacBook with 8 GB of memory. Good explanations at a comfortable speed.',
+  { key: 'Qwen3.5-2B', name: 'Lanthelle', base: 'Qwen3.5 2B', blurb: 'Everyday', tag: 'Recommended', tagClass: '',
+    desc: 'The everyday model: the best balance for a MacBook with 8 GB of memory. Good explanations at a comfortable speed.',
     downloadMB: 1083, vramMB: 2245, ctxSizes: { small: 4096, standard: 8192, large: 16384, max: 32768 }, repetition: 1.0,
     ids: { f16: 'Qwen3.5-2B-q4f16_1-MLC', f32: 'Qwen3.5-2B-q4f32_1-MLC' } },
-  { key: 'Qwen3.5-4B', name: 'Qwen3.5 4B', tag: 'Smartest', tagClass: 'lamp',
+  { key: 'Qwen3.5-4B', name: 'Radivane', base: 'Qwen3.5 4B', blurb: 'Smarter', tag: 'Smartest', tagClass: 'lamp',
     desc: 'Better reasoning and fewer mistakes, but about half as fast. On an 8 GB Mac, close other apps and tabs first.',
     downloadMB: 2390, vramMB: 3868, ctxSizes: { small: 4096, standard: 8192, large: 12288, max: 16384 }, repetition: 1.0,
     ids: { f16: 'Qwen3.5-4B-q4f16_1-MLC', f32: 'Qwen3.5-4B-q4f32_1-MLC' } },
-  { key: 'Qwen3.5-9B', name: 'Qwen3.5 9B', tag: 'Strongest', tagClass: 'lamp', power: true, needsGB: 16,
-    desc: 'The strongest model, for a strong computer: 16 GB of memory or more, with other apps closed. Clearly better reasoning and facts, and it unlocks the Max thinking mode. About half as fast as the 4B.',
+  { key: 'Qwen3.5-9B', name: 'Solvarra', base: 'Qwen3.5 9B', blurb: 'Strongest', tag: 'Strongest', tagClass: 'lamp', power: true, needsGB: 16,
+    desc: 'The strongest model, for a strong computer: 16 GB of memory or more, with other apps closed. Clearly better reasoning and facts, and it unlocks the Ultra effort. About half as fast as Radivane.',
     downloadMB: 5061, vramMB: 6433, ctxSizes: { small: 4096, standard: 8192, large: 12288, max: 16384 }, repetition: 1.0,
     ids: { f16: 'Qwen3.5-9B-q4f16_1-MLC', f32: 'Qwen3.5-9B-q4f32_1-MLC' } },
-  { key: 'Qwen3.5-0.8B', name: 'Qwen3.5 0.8B', tag: 'Fastest', tagClass: 'plain',
+  { key: 'Qwen3.5-0.8B', name: 'Sparvelle', base: 'Qwen3.5 0.8B', blurb: 'Quickest', tag: 'Fastest', tagClass: 'plain',
     desc: 'Small and quick. Fine for simple questions, but it makes more mistakes.',
     downloadMB: 447, vramMB: 1629, ctxSizes: { small: 4096, standard: 8192, large: 16384, max: 32768 }, repetition: 1.05,
     ids: { f16: 'Qwen3.5-0.8B-q4f16_1-MLC', f32: 'Qwen3.5-0.8B-q4f32_1-MLC' } },
 ];
+/* Old answers saved the model's display name; this finds the model by Lumen's name, its real name or the old name. */
+const modelByName = n => MODELS.find(x => x.name === n || x.base === n) || null;
+const fullModelName = m => `${m.name} (${m.base})`;
 
-/* Thinking modes. budget = the most tokens Lumen may spend thinking before it writes the answer.
-   Auto chooses between Fast, Think and Deep for each question (see pickMode). */
+/* Effort: how hard Lumen works on an answer, from Instant to Ultra (like the effort setting of the big assistants).
+   level = place on the ladder (1 to 7). budget = the most tokens Lumen may spend thinking before it writes the answer.
+   articles / notesChars = how much it reads; plan = plans its searches first; tries = answers a checkable question this many
+   times and keeps the answer most tries agree on; check = checks the answer against the sources and repairs a wrong detail.
+   Auto picks the level for each question (see pickMode) and learns from your ratings which kinds of questions need more (see EffortLearn). */
 const MODES = {
-  auto:  { key: 'auto',  label: 'Auto',  icon: 'spark',  auto: true, think: true, budget: 640, answer: 1300, articles: 3, notesChars: 5200, promptTokens: 4200, histTokens: 1800, docChars: 14000,
-           desc: 'Picks the right amount of thinking for each question. Quick for simple ones, careful for hard ones.' },
-  fast:  { key: 'fast',  label: 'Fast',  icon: 'bolt',   think: false, budget: 0,    answer: 1200, articles: 2, notesChars: 3600, promptTokens: 2800, histTokens: 1100, docChars: 9000,
-           desc: 'Answers right away. Good for simple questions.' },
-  think: { key: 'think', label: 'Think', icon: 'bulb',   think: true,  budget: 700,  answer: 1400, articles: 3, notesChars: 5600, promptTokens: 4200, histTokens: 1800, docChars: 14000,
-           desc: 'Thinks briefly in the background, then answers. Best for “why” and “how” questions.' },
-  deep:  { key: 'deep',  label: 'Deep',  icon: 'layers', think: true,  budget: 1700, answer: 1800, articles: 5, notesChars: 11000, plan: true, promptTokens: 8000, histTokens: 3200, docChars: 28000,
-           desc: 'Plans several searches, reads more sources and thinks longer. For hard problems and reports. Slower.' },
-  max:   { key: 'max',   label: 'Max',   icon: 'layers', power: true, think: true, budget: 3000, answer: 2200, articles: 6, notesChars: 14000, plan: true, promptTokens: 9000, histTokens: 3600, docChars: 36000,
-           desc: 'Only with the 9B model. Plans searches, reads the most sources and thinks the longest. The slowest and most careful.' },
+  auto:    { key: 'auto',    label: 'Auto',       icon: 'spark',  auto: true, think: true, budget: 640, answer: 1300, articles: 3, notesChars: 5200, promptTokens: 4200, histTokens: 1800, docChars: 14000, check: true,
+             desc: 'Picks the effort for each question: quick for simple ones, careful for hard ones. Learns from your ratings.' },
+  instant: { key: 'instant', label: 'Instant',    icon: 'bolt',   level: 1, think: false, budget: 0,    answer: 1000, articles: 1, notesChars: 2400,  promptTokens: 2200, histTokens: 800,  docChars: 6000,  check: false,
+             desc: 'Answers at once and reads the least. The fastest.' },
+  low:     { key: 'low',     label: 'Low',        icon: 'bolt',   level: 2, think: false, budget: 0,    answer: 1200, articles: 2, notesChars: 3600,  promptTokens: 2800, histTokens: 1100, docChars: 9000,  check: true,
+             desc: 'No thinking step. Good for simple questions.' },
+  medium:  { key: 'medium',  label: 'Medium',     icon: 'bulb',   level: 3, think: true,  budget: 380,  answer: 1300, articles: 3, notesChars: 4800,  promptTokens: 3600, histTokens: 1500, docChars: 12000, check: true,
+             desc: 'Thinks for a moment first. A good everyday choice.' },
+  high:    { key: 'high',    label: 'High',       icon: 'bulb',   level: 4, think: true,  budget: 700,  answer: 1400, articles: 3, notesChars: 5600,  promptTokens: 4200, histTokens: 1800, docChars: 14000, check: true,
+             desc: 'Thinks it through. Best for “why” and “how” questions.' },
+  xhigh:   { key: 'xhigh',   label: 'Extra high', icon: 'layers', level: 5, think: true,  budget: 1200, answer: 1600, articles: 4, notesChars: 8000,  plan: true, promptTokens: 6000, histTokens: 2600, docChars: 20000, check: true,
+             desc: 'Plans its searches, reads more and thinks longer.' },
+  max:     { key: 'max',     label: 'Max',        icon: 'layers', level: 6, think: true,  budget: 1800, answer: 1800, articles: 5, notesChars: 11000, plan: true, tries: 3, promptTokens: 8000, histTokens: 3200, docChars: 28000, check: true,
+             desc: 'Thinks long, reads many sources, and answers a checkable question three times to agree on it. Slow.' },
+  ultra:   { key: 'ultra',   label: 'Ultra',      icon: 'layers', level: 7, power: true, think: true, budget: 3000, answer: 2200, articles: 6, notesChars: 14000, plan: true, tries: 5, promptTokens: 9000, histTokens: 3600, docChars: 36000, check: true,
+             desc: 'Only with Solvarra. The longest thinking, the most sources and five tries for checkable answers. The slowest and most careful.' },
 };
+/* Older names of the levels (saved settings, old chats, slash commands): Fast, Think, Deep and Max (which needed the 9B model). */
+const MODE_ALIAS = { fast: 'low', think: 'high', deep: 'max' };
+const modeKeyOf = k => (MODES[k] ? k : MODE_ALIAS[k] || 'auto');
+const modeOf = k => MODES[modeKeyOf(k)];
+const LEVELS = Object.values(MODES).filter(m => m.level).sort((a, b) => a.level - b.level);
+/* the level n steps up or down from k, within what this model allows */
+function levelStep(k, n) {
+  const list = LEVELS.filter(m => !m.power || Brain.model(S.model).power);
+  const i = list.findIndex(m => m.key === modeKeyOf(k));
+  return list[Math.max(0, Math.min(list.length - 1, (i < 0 ? 3 : i) + n))].key;
+}
 
 const STYLES = {
   normal: { label: 'Normal', desc: 'Clear answers that fit the question.',
@@ -1252,9 +1283,9 @@ How you answer:
 /* The most facts Lumen keeps about the user. */
 const MEM_MAX = 60;
 const FOLLOWUPS = [
-  { label: 'Simpler', text: 'Explain that again in simpler words, with an everyday comparison.', noLookup: true, mode: 'fast', learnStyle: 'simple' },
-  { label: 'Example', text: 'Give me another concrete example of this.', noLookup: true, mode: 'fast', learnStyle: 'example' },
-  { label: 'Go deeper', text: 'Go deeper: explain the why behind this in more detail.', mode: 'think', learnStyle: 'deeper' },
+  { label: 'Simpler', text: 'Explain that again in simpler words, with an everyday comparison.', noLookup: true, mode: 'low', learnStyle: 'simple' },
+  { label: 'Example', text: 'Give me another concrete example of this.', noLookup: true, mode: 'low', learnStyle: 'example' },
+  { label: 'Go deeper', text: 'Go deeper: explain the why behind this in more detail.', mode: 'high', learnStyle: 'deeper' },
   { label: 'Quiz me', text: '/quiz', study: 'quiz' },
 ];
 
@@ -1291,14 +1322,20 @@ const ROLES = {
 /* Slash commands typed in the message box. */
 const SLASH = [
   { cmd: 'search', icon: 'globe', arg: 'question', desc: 'Look this up on the web and in Wikipedia first' },
-  { cmd: 'deep', icon: 'layers', arg: 'question', desc: 'Think longer and read more sources' },
-  { cmd: 'max', icon: 'layers', arg: 'question', desc: 'The longest, most careful thinking (needs the 9B model)', hidden: true },
-  { cmd: 'fast', icon: 'bolt', arg: 'question', desc: 'Answer right away' },
-  { cmd: 'think', icon: 'bulb', arg: 'question', desc: 'Think briefly, then answer' },
+  { cmd: 'instant', icon: 'bolt', arg: 'question', desc: 'Effort Instant: answer at once' },
+  { cmd: 'low', icon: 'bolt', arg: 'question', desc: 'Effort Low: no thinking step' },
+  { cmd: 'medium', icon: 'bulb', arg: 'question', desc: 'Effort Medium: think for a moment' },
+  { cmd: 'high', icon: 'bulb', arg: 'question', desc: 'Effort High: think it through' },
+  { cmd: 'xhigh', icon: 'layers', arg: 'question', desc: 'Effort Extra high: plan searches, read more, think longer' },
+  { cmd: 'max', icon: 'layers', arg: 'question', desc: 'Effort Max: long thinking, many sources, three tries' },
+  { cmd: 'ultra', icon: 'layers', arg: 'question', desc: 'Effort Ultra: the most careful (needs Solvarra)' },
+  { cmd: 'deep', icon: 'layers', arg: 'question', desc: 'Same as /max', hidden: true },
+  { cmd: 'fast', icon: 'bolt', arg: 'question', desc: 'Same as /low', hidden: true },
+  { cmd: 'think', icon: 'bulb', arg: 'question', desc: 'Same as /high', hidden: true },
   { cmd: 'simple', icon: 'text', arg: 'question', desc: 'Explain in everyday words' },
   { cmd: 'short', icon: 'text', arg: 'question', desc: 'Keep the answer short' },
   { cmd: 'tutor', icon: 'book', arg: 'question', desc: 'Teach step by step and check understanding' },
-  { cmd: 'vote', icon: 'layers', arg: 'question', desc: 'Hard puzzle: three tries, the most common answer wins (Deep mode, slower)' },
+  { cmd: 'vote', icon: 'layers', arg: 'question', desc: 'Hard puzzle: three tries, the most common answer wins (Max effort, slower)' },
   { cmd: 'lab', icon: 'layers', arg: '', hidden: true, desc: 'Test lab: compare models, prompts and speed' },
   { cmd: 'both', icon: 'layers', arg: 'question', desc: 'Show both sides of a debate, fairly' },
   { cmd: 'quiz', icon: 'quiz', arg: 'topic', desc: 'Make a 5-question quiz' },
@@ -1454,7 +1491,17 @@ async function copyText(text, btn) {
   if (btn) { const old = btn.innerHTML; btn.innerHTML = icon(ok ? 'check' : 'x', 17); setTimeout(() => (btn.innerHTML = old), 1300); }
   if (!ok) toast('Could not copy. Select the text and copy it by hand.');
 }
-function downloadFile(name, text, type = 'text/markdown') {
+/* Saved Markdown files start with a short machine-readable note (front matter) that the text was made by an AI, as the EU AI Act
+   (Article 50(2)) asks of AI systems that write text; the visible "AI-generated by Lumen" line stays at the end.
+   ai = 'all' (everything in the file is from the AI) or 'mixed' (a chat: your messages and the AI's answers). */
+const IPTC_AI = 'http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia';
+const IPTC_MIXED = 'http://cv.iptc.org/newscodes/digitalsourcetype/compositeWithTrainedAlgorithmicMedia';
+function aiFrontMatter(ai = 'all') {
+  const m = Brain.model(Brain.loadedKey || S.model);
+  return `---\ngenerator: "Lumen"\nai_generated: ${ai === 'mixed' ? '"partly (the answers)"' : 'true'}\ndigital_source_type: "${ai === 'mixed' ? IPTC_MIXED : IPTC_AI}"\nai_model: "${m.name} (${m.base})"\nsaved: "${new Date().toISOString()}"\n---\n\n`;
+}
+function downloadFile(name, text, type = 'text/markdown', ai = 'all') {
+  if (type === 'text/markdown' && /\.md$/i.test(name)) text = aiFrontMatter(ai) + text;
   const url = URL.createObjectURL(new Blob([text], { type }));
   const a = h('a', { href: url, download: name }); document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
@@ -1462,7 +1509,7 @@ function downloadFile(name, text, type = 'text/markdown') {
 
 /* ---------- settings ---------- */
 const DEFAULTS = {
-  ver: 4, model: 'Qwen3.5-2B', mode: 'auto', style: 'normal', wiki: 'auto', about: '', name: '', rules: '', city: '',
+  ver: 5, model: 'Qwen3.5-2B', mode: 'auto', style: 'normal', wiki: 'auto', about: '', name: '', rules: '', city: '',
   creativity: 'balanced', theme: 'system', textSize: 'normal', sendKey: 'enter', breakNudge: false, check: true, autoStart: true, keepAwake: true, strongPc: false, rail: true,
   ctxSize: 'large', memory: [], sources: {}, reader: 'ask', webProvider: 'jina', webKey: '', speechRate: 1, speechVoice: '', showNotes: true,
 };
@@ -1471,10 +1518,11 @@ const S = (() => {
   try { saved = JSON.parse(localStorage.getItem('lumen.settings') || '{}'); } catch {}
   const s = { ...DEFAULTS, ...saved };
   if ((saved.ver || 0) < 4) { if (!saved.mode || saved.mode === 'think') s.mode = 'auto'; s.ver = 4; }
+  if ((saved.ver || 0) < 5) { if (s.vote) s.vote = { on: true }; if (s.mode === 'max') s.mode = 'ultra'; if (!saved.promptVersion || saved.promptVersion === 'v1') s.promptVersion = 'v4'; s.ver = 5; }   // version 19: the old Max (9B only) is now Ultra; the new base instructions
   return s;
 })();
 if (!MODELS.some(m => m.key === S.model)) S.model = DEFAULTS.model;
-if (!MODES[S.mode]) S.mode = 'auto';
+S.mode = modeKeyOf(S.mode);
 S.styles = (Array.isArray(S.styles) ? S.styles : []).filter(x => x && /^c_[a-z0-9]{2,16}$/.test(x.key) && typeof x.label === 'string' && x.label.trim() && typeof x.prompt === 'string' && x.prompt.trim())
   .slice(0, 12).map(x => ({ key: x.key, label: x.label.trim().slice(0, 30), desc: String(x.desc || '').slice(0, 80), prompt: x.prompt.trim().slice(0, 600) }));
 loadCustomStyles(S.styles);
@@ -1522,12 +1570,12 @@ S.memory = S.memory.filter(m => m && typeof m.text === 'string').slice(0, MEM_MA
   const edits = {};
   for (const [id, v] of Object.entries(e.edits && typeof e.edits === 'object' ? e.edits : {})) if (/^ex\d\d$/.test(id) && v && typeof v.q === 'string' && typeof v.a === 'string' && v.q && v.a) edits[id] = { q: v.q.slice(0, 200), a: v.a.slice(0, 2500) };
   S.examples = { on: e.on === true, ok: (Array.isArray(e.ok) ? e.ok : []).filter(x => typeof x === 'string' && /^ex\d\d$/.test(x)).slice(0, 20), edits };
-  if (typeof S.promptVersion !== 'string' || !/^v\d$/.test(S.promptVersion)) S.promptVersion = 'v1';
+  if (typeof S.promptVersion !== 'string' || !/^v\d$/.test(S.promptVersion)) S.promptVersion = 'v4';
 }
 /* Add "AI-generated by Lumen" to copied answers (exported files always carry it). */
 S.aiLabel = S.aiLabel !== false;
 /* Voting on hard questions (see 155-vote.js). */
-S.vote = { on: !!(S.vote && S.vote.on === true) };
+S.vote = { on: !(S.vote && S.vote.on === false) };   // on unless switched off: it only runs at Max and Ultra effort, which you choose to be careful
 /* Dictation (see 179-dictation.js). Off unless the person turned it on, and 'mode' remembers which kind they said yes to. */
 {
   const v = S.dictation && typeof S.dictation === 'object' ? S.dictation : {};
@@ -2058,7 +2106,7 @@ const Brain = {
   /* Stop the engine. If the graphics chip is frozen, unload() may never answer, so it only gets a few seconds before the worker is ended. */
   async teardown() {
     const eng = this.engine, wk = this.worker;
-    this.engine = null; this.worker = null; this.loadedKey = null;
+    this.engine = null; this.worker = null; this.loadedKey = null; this.lastConv = null;
     let t;
     try { await Promise.race([Promise.resolve(eng?.unload?.()), new Promise(r => { t = setTimeout(r, this.limits.unload); })]); } catch {}
     clearTimeout(t);
@@ -2149,6 +2197,7 @@ const Brain = {
     this.state = 'loading'; this.loadingKey = key; this.phase = ''; this.progress = 0; this.mb = 0; this.totalMB = 0; this.speed = 0; this.elapsed = 0; this.error = ''; this.retrying = 0; this.storeSwitched = false; this.netFail = false;
     this.stalled = false; this.stuck = false; this.lastEvent = Date.now(); this.events = 0;
     const token = ++this.loadToken;
+    this.lastConv = null;   // a new start (or a new memory size) empties what the engine remembered of the chat
     try { this.dlCtl?.abort(); } catch {}
     this.dlCtl = new AbortController();
     const tLoad0 = performance.now();
@@ -2284,9 +2333,9 @@ const Brain = {
     this.queue = job.catch(() => {});
     return job;
   },
-  async _generate({ messages, think, temperature, top_p, presence_penalty = 1.5, max_tokens, onDelta, json, seed }) {
+  async _generate({ messages, think, temperature, top_p, presence_penalty = 1.5, max_tokens, onDelta, json, seed, tag }) {
     if (!this.engine || this.state !== 'ready') throw new Error('The AI model is not ready yet.');
-    this.busy = true;
+    this.busy = true; this.lastConv = null;
     Guard.enter('answering');
     /* Watchdog: if no word arrives for a long time, the graphics chip has probably frozen. Time when the computer slept does not count. */
     const L = this.limits, wd = { last: Date.now(), tick: Date.now(), first: true };
@@ -2323,6 +2372,11 @@ const Brain = {
         if (choice?.finish_reason) finish = choice.finish_reason;
         if (chunk.usage) usage = chunk.usage;
       }
+      /* What the engine holds now: these messages plus its own output, exactly as it keeps it. The next answer in the same chat
+         can then send this plus the new question, and the engine reads only the new question (see replayFor). */
+      let reply = text;
+      try { const g = await this.engine.getMessage?.(); if (typeof g === 'string' && g.length >= text.length) reply = g; } catch {}
+      this.lastConv = { key: this.loadedKey, tag: tag || null, messages: messages.map(m => ({ role: m.role, content: m.content })), reply };
       if (max_tokens !== 1) try { Usage.addCall({ model: this.loadedKey, usage, text, messages, ms: performance.now() - t0, lab: typeof Lab !== 'undefined' && !!Lab.isBusy?.() }); } catch {}   // counted on this computer only (the 1-token warm-up after loading
       return { text, usage, finish };
     } catch (e) {
@@ -4995,7 +5049,7 @@ function showMenu(anchor, title, items, value, onPick, pos) {
   const menu = h('div', { class: 'menu', role: 'menu', 'aria-label': title }, h('div', { class: 'menu-title', text: title }));
   for (const it of items) {
     const b = h('button', { type: 'button', role: 'menuitemradio', 'aria-checked': String(it.value === value) },
-      h('span', { class: 'mi', html: it.icon ? icon(it.icon, 16) : '' }), h('span', { class: 't', text: it.label }),
+      h('span', { class: 'mi', html: it.meter != null ? effortMeter(it.meter) : it.icon ? icon(it.icon, 16) : '' }), h('span', { class: 't', text: it.label }),
       h('span', { class: 'ck', html: it.value === value ? icon('check', 16) : '' }), it.desc ? h('span', { class: 'd', text: it.desc }) : null);
     b.addEventListener('click', () => { closeMenu(true); onPick(it.value); });
     menu.append(b);
@@ -5030,12 +5084,17 @@ function showActions(anchor, title, groups, pos) {
 document.addEventListener('pointerdown', e => { if (openMenuEl && !openMenuEl.contains(e.target) && !openMenuEl._anchor.contains(e.target)) closeMenu(); });
 window.addEventListener('resize', () => closeMenu());
 
+/* Seven small bars, the first `level` of them filled: the effort at a glance. */
+function effortMeter(level) {
+  return `<span class="effort-meter" aria-hidden="true">${LEVELS.map((m, i) => `<i class="${i < level ? 'on' : ''}" style="height:${4 + i * 1.5}px"></i>`).join('')}</span>`;
+}
+const effortItems = () => modesFor().map(m => ({ value: m.key, label: m.label, desc: m.desc, icon: m.auto ? 'spark' : '', meter: m.auto ? null : m.level }));
 function renderPills() {
-  const m = MODES[S.mode];
-  els.modeBtn.innerHTML = `${icon(S.mode === 'auto' ? 'clock' : m.icon, 15)}<span class="lbl-long">${S.mode === 'auto' ? 'Auto' : m.label}</span>${icon('chev', 13).replace('class="ic"', 'class="ic chev"')}`;
-  els.modeBtn.classList.toggle('on', S.mode !== 'auto');
-  els.modeBtn.title = 'Thinking: ' + m.desc;
-  els.modeBtn.setAttribute('aria-label', 'Thinking: ' + m.label);
+  const m = modeOf(S.mode);
+  els.modeBtn.innerHTML = `${m.auto ? icon('spark', 15) : effortMeter(m.level)}<span class="lbl-long">${m.label}</span>${icon('chev', 13).replace('class="ic"', 'class="ic chev"')}`;
+  els.modeBtn.classList.toggle('on', !m.auto);
+  els.modeBtn.title = 'Effort: ' + m.desc;
+  els.modeBtn.setAttribute('aria-label', 'Effort: ' + m.label);
   // the settings that are not the usual ones show as small tags you can remove (like Claude's style chip)
   const rk = getRole(), tags = [];
   if (rk) tags.push([ROLES[rk].icon, ROLES[rk].label, 'Remove the role', () => setRole('')]);
@@ -5045,8 +5104,7 @@ function renderPills() {
   els.cTags.replaceChildren(...tags.map(([ic, label, tip, off]) => h('span', { class: 'ctag' }, h('span', { html: icon(ic, 13) }), h('span', { text: label }), h('button', { type: 'button', 'aria-label': tip, title: tip, html: icon('x', 12), onclick: off }))));
   els.toolsBtn.classList.toggle('on', !!tags.length);
 }
-els.modeBtn.addEventListener('click', () => showMenu(els.modeBtn, 'How much should Lumen think?',
-  modesFor().map(m => ({ value: m.key, label: m.label, desc: m.desc, icon: m.key === 'auto' ? 'clock' : m.icon })), S.mode, v => { S.mode = v; saveSettings(); renderPills(); }));
+els.modeBtn.addEventListener('click', () => showMenu(els.modeBtn, 'Effort: how hard should Lumen work?', effortItems(), S.mode, v => { S.mode = v; saveSettings(); renderPills(); }));
 const getRole = () => { const c = current(); return (c ? c.role : App.pendingRole) || ''; };
 function setRole(k) {
   k = ROLES[k] ? k : '';
@@ -5213,7 +5271,7 @@ function summaryDivider(c) {
 }
 function userTags(m) {
   const o = m.ovr || {}, out = [];
-  if (o.mode) out.push([MODES[o.mode].icon, MODES[o.mode].label + ' mode']);
+  if (o.mode) out.push([modeOf(o.mode).icon, modeOf(o.mode).label + ' effort']);
   if (o.search === 'on') out.push(['globe', 'Searched first']);
   if (o.vote) out.push(['layers', 'Three tries']);
   if (o.style) out.push(['text', STYLES[o.style].label + ' style']);
@@ -5399,7 +5457,7 @@ function fillAssistant(node, m, chat) {
     if (isLast && m.content && !m.widget) {
       const f = h('div', { class: 'follow' });
       // the answer stopped at the length limit: carry on where it stopped
-      if (m.cutLength || /The answer hit the length limit/.test(m.content)) f.append(h('button', { class: 'chip-btn strong', type: 'button', html: `${icon('arrowr', 13)}<span>Continue</span>`, onclick: () => submitText('Continue exactly where you stopped. Do not repeat what you already wrote.', { noLookup: true, ovr: { mode: 'fast' } }) }));
+      if (m.cutLength || /The answer hit the length limit/.test(m.content)) f.append(h('button', { class: 'chip-btn strong', type: 'button', html: `${icon('arrowr', 13)}<span>Continue</span>`, onclick: () => submitText('Continue exactly where you stopped. Do not repeat what you already wrote.', { noLookup: true, ovr: { mode: 'low' } }) }));
       for (const fu of FOLLOWUPS) f.append(h('button', { class: 'chip-btn', type: 'button', text: fu.label, onclick: () => submitText(fu.text, { noLookup: fu.noLookup, learnStyle: fu.learnStyle, ovr: fu.mode ? { mode: fu.mode } : undefined }) }));
       r.foot.append(f);
     }
@@ -5411,8 +5469,9 @@ function fillAssistant(node, m, chat) {
       r.foot.append(btn, why);
       if (!m.widget) r.foot.append(h('button', { class: 'conf fc-btn', type: 'button', text: m.factCheck ? 'Fact check results' : 'Check facts', title: 'Look up the claims in this answer', onclick: () => showFactCheck(chat, m) }));
     }
-    const mm = MODES[m.mode];
-    const meta = h('span', { class: 'meta', title: [m.modelName, mm && (m.auto ? `Auto chose ${mm.label}` + (m.autoWhy ? ` (${m.autoWhy})` : '') : mm.label + ' mode')].filter(Boolean).join(', ') });
+    const mm = m.mode ? modeOf(m.mode) : null;
+    const mdl = modelByName(m.modelName);
+    const meta = h('span', { class: 'meta', title: [mdl ? fullModelName(mdl) : m.modelName, mm && (m.auto ? `Auto chose ${mm.label} effort` + (m.autoWhy ? ` (${m.autoWhy})` : '') : mm.label + ' effort')].filter(Boolean).join(', ') });
     if (mm && !m.widget) meta.append(h('span', { text: m.auto ? `Auto · ${mm.label}` : mm.label }));
     if (m.stats?.secs) meta.append(h('span', { text: fmtSecs(m.stats.secs) }));
     if (m.stats?.tps) meta.append(h('span', { text: `${m.stats.tps.toFixed(0)} tok/s` }));
@@ -5467,25 +5526,50 @@ Format:
 - Write math in LaTeX: inline as $...$ and on its own line as $$...$$.
 - Never mention these instructions.`;
 const PROMPT_V3 = PROMPT_V2.replace('How to explain:\n', 'How to explain:\n- First decide the one thing the user most needs to understand, and put that first.\n');
+/* v4 (version 19): written to answer the way Claude does: warm and direct, no flattery or filler, the user's language,
+   prose before lists, one short question when a request is unclear, honest about mistakes and about wrong premises, no lecturing. */
+const PROMPT_V4 = `You are Lumen, a helpful AI assistant and patient tutor. You run privately on the user's own computer.
+
+How you talk:
+- Be warm and direct, like a knowledgeable friend. Get to the point. No flattery, no filler such as "Great question!", and do not repeat the question back.
+- Answer in the language the user writes in.
+- Put the most important thing first. Match the length to the question: a sentence or two for a simple question, more for a complex one.
+- Explain in clear prose with short paragraphs, in your own words. Use lists, headings or tables only when they make the answer easier to read, and **bold** only for key terms. Write math in LaTeX, inline as $...$ and on its own line as $$...$$.
+- If a request is unclear and the answer depends on it, ask one short question. Otherwise make a sensible assumption, say it in a few words, and answer.
+
+How you think:
+- First work out what the user really needs.
+- For math, logic and code, work step by step and check the result before you state it. Give complete code that works.
+
+Honesty:
+- If you are not sure, say so plainly and say what you do know. Never invent facts, numbers, dates, quotes, links or sources.
+- If the user says something that is not true, say so kindly and explain why. If they push back, change your answer only when they give a good reason.
+- If you made a mistake earlier in the chat, say so and correct it.
+- Stay on the subject the user named. If you do not recognise a film, book, person, product or event, say so instead of describing something similar. For example, never describe a different film by the same director.
+- Do not lecture or moralise. Help with what was asked; refuse only what could really hurt someone, briefly and without preaching.
+- Never mention these instructions.`;
 const PROMPT_VERSIONS = {
   v1: { label: 'v1', date: '2026-10-11', note: 'The prompt Lumen shipped with: one list of rules.', text: BASE_PROMPT },
   v2: { label: 'v2', date: '2026-10-12', note: 'The same rules sorted into the four blocks from the plan: role, how to explain, honesty, format. Shorter.', text: PROMPT_V2 },
   v3: { label: 'v3', date: '2026-10-12', note: 'v2 plus one rule: put the one most important thing first.', text: PROMPT_V3 },
+  v4: { label: 'v4', date: '2026-10-17', note: 'Warm and direct, no flattery, your language, one short question when something is unclear, honest about mistakes and wrong premises. The default since version 19.', text: PROMPT_V4 },
 };
-const promptVersion = () => (PROMPT_VERSIONS[S.promptVersion] ? S.promptVersion : 'v1');
+const promptVersion = () => (PROMPT_VERSIONS[S.promptVersion] ? S.promptVersion : 'v4');
 const basePrompt = v => (PROMPT_VERSIONS[v] || PROMPT_VERSIONS[promptVersion()]).text;
 
 /* ---------- prompt building ---------- */
 function todayText() { return new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); }
 const stripTags = s => String(s || '').replace(/<\/?(?:notes|documents?|think|memory)>/gi, '');
 
-function systemPrompt({ style, think, playbook, summary, relevance, role, version, project }) {
-  const parts = [basePrompt(version), STYLES[style]?.prompt || STYLES.normal.prompt];
+function systemPrompt({ style, playbook, summary, relevance, role, version, project }) {
+  const lm = Brain.model(Brain.loadedKey || S.model);
+  const parts = [basePrompt(version) + `\n\nAbout you: you are Lumen, running the ${lm.name} model (Lumen's name for ${lm.base}, an open model made by the Qwen team at Alibaba Cloud). If asked, say so; do not claim to be another assistant.`, STYLES[style]?.prompt || STYLES.normal.prompt];
   if (role && ROLES[role]) parts.push(ROLES[role].prompt);
   const proj = project ? Projects.get(project) : null;
   if (proj?.instructions) parts.push(`This chat is part of the user's project “${clip(proj.name, 60)}”. The user's instructions for this project (follow them unless they would make you dishonest or unsafe): ${clip(stripTags(proj.instructions), 1200)}`);
   if (playbook && PLAYBOOKS[playbook]) parts.push(PLAYBOOKS[playbook]);
-  if (think) parts.push('Before you answer, reason step by step inside <think> and </think>. Keep that reasoning short and focused, and never repeat yourself. Then write the final answer for the user after </think>.');
+  // the same words whether or not this answer thinks, so the start of the chat stays the same from turn to turn (see Brain.lastConv)
+  parts.push('When you think before you answer, reason step by step inside <think> and </think>. Keep that reasoning short and focused, and never repeat yourself. Then write the final answer for the user after </think>.');
   const name = (S.name || '').trim();
   if (name) parts.push(`The user's name is ${clip(name, 40)}.`);
   const about = (S.about || '').trim();
@@ -5522,8 +5606,28 @@ function contextBlocks({ notes, exact, docs }) {
   return out;
 }
 
-/* Build the messages for the model. `budget` is the most tokens the prompt may use; `histTokens` caps how much old chat is replayed. */
-function buildMessages({ chat, userMsg, notes, exact, docs, budget, histTokens, style, think, playbook, examples, version }) {
+/* Faster follow-ups: the engine keeps the chat it last answered in its memory (WebLLM's "KV cache"). If the next request is exactly
+   that chat plus one new message, the engine reads only the new message instead of everything again, so the answer starts much
+   sooner. This works when the last thing the engine did was answer the previous question of this chat, the instructions at the
+   top are the same, and it all still fits. An answer that thought first is not replayed: its reasoning would be shown to the model
+   again, which Qwen's own chat format never does, so the chat is then built afresh as before. Same answers, less waiting. */
+const reasoningIn = reply => { const m = /^\s*(?:<think>)?([\s\S]*?)<\/think>/.exec(String(reply || '')); return !!(m && m[1].trim()); };
+function replayFor({ chat, idx, sys, content, maxTokens }) {
+  const lc = Brain.lastConv;
+  if (!lc || !lc.tag || lc.tag.chat !== chat.id || lc.key !== Brain.loadedKey) return null;
+  const prevAi = chat.messages[idx - 1];
+  if (!prevAi || prevAi.role !== 'assistant' || prevAi.id !== lc.tag.am || prevAi.state !== 'done') return null;
+  if (lc.messages[0]?.role !== 'system' || lc.messages[0].content !== sys || reasoningIn(lc.reply)) return null;
+  // two sets of notes would both be numbered [1], [2] ...: then the chat is built afresh, with only the new notes
+  if (content.includes('<notes>') && lc.messages.some(m => m.role === 'user' && String(m.content).includes('<notes>'))) return null;
+  const messages = [...lc.messages, { role: 'assistant', content: lc.reply }, { role: 'user', content }];
+  const used = messages.reduce((n, m) => n + estTokens(m.content), 0);
+  return used <= maxTokens ? { messages, used } : null;
+}
+
+/* Build the messages for the model. `budget` is the most tokens the prompt may use; `histTokens` caps how much old chat is replayed.
+   `replayMax` (when set) allows the faster follow-up above, up to that many tokens. */
+function buildMessages({ chat, userMsg, notes, exact, docs, budget, histTokens, style, think, playbook, examples, version, replayMax }) {
   // The chat summary covers older messages; only newer ones are replayed.
   const all = chat.messages;
   const idx = all.indexOf(userMsg);
@@ -5545,6 +5649,8 @@ function buildMessages({ chat, userMsg, notes, exact, docs, budget, histTokens, 
   // the last thing the model reads is the rule that matters most for facts (small models follow what they read last)
   const fromWhat = [nb?.block && 'notes', db?.block && 'documents'].filter(Boolean).join(' and ');
   const content = ctxText ? ctxText + `My question: ${question}` + (fromWhat ? `\n\n(Take every date, number and name from the ${fromWhat}. If a detail is not there, leave it out or say you are not sure.)` : '') : question;
+  const rp = replayMax ? replayFor({ chat, idx, sys, content, maxTokens: replayMax }) : null;
+  if (rp) return { messages: rp.messages, dropped: false, used: rp.used, truncated, examples: [], replay: true };
 
   const prior = all.slice(sumAt >= 0 && sumAt < idx ? sumAt + 1 : 0, idx).filter(m => m.role === 'user' || (m.role === 'assistant' && m.content && m.state !== 'error'));
   // example answers go first, as earlier turns; the least similar ones give way when the prompt is tight
@@ -5594,22 +5700,22 @@ const NEWS_RE = /\b(news|headlines?|breaking|happened|happening|latest|today|thi
 const DEBATE_RE = /\b(should (?:we|they|schools?|students?|people|countries|governments?|the (?:government|state|law|world|eu|us|uk))\b|is it (?:fair|right|wrong|ethical|moral|acceptable|justified|good|bad) (?:to|that|for)\b|both sides|for and against|arguments? (?:for|against)|pros and cons of|(?:good|bad) idea (?:to|for)\b|debate)/i;
 const LIVE_RE = /\b(weather|forecast|temperature|exchange rate|convert|price of|bitcoin|ethereum|crypto)\b/i;
 
-/* Auto mode: Fast for simple things, Think for reasoning, Deep for big jobs. Thinking costs time, so it is used only when it helps. */
-/* The modes the person may choose: Max needs a power model (the 9B). */
+/* Auto: Low for simple things, High for reasoning, Max for big jobs (then EffortLearn may raise it). Thinking costs time, so it is used only when it helps. */
+/* The levels the person may choose: Ultra needs a power model (Solvarra). */
 const modesFor = () => Object.values(MODES).filter(m => !m.power || Brain.model(S.model).power);
 function pickMode(text, { hasDocs = false, exactOnly = false, toolOnly = false } = {}) {
   const t = (text || '').trim(), low = t.toLowerCase();
   const words = t.split(/\s+/).filter(Boolean).length;
-  if (exactOnly || toolOnly) return { key: 'fast', why: 'a quick lookup' };
-  if (words > 120 || DEEP_RE.test(low)) return { key: 'deep', why: 'a big question' };
-  if (FAST_RE.test(low) && words <= 40) return { key: 'fast', why: 'a simple request' };
-  if (MATH_RE.test(t) || CODE_RE.test(t)) return { key: 'think', why: 'reasoning needed' };
-  if (DEBATE_RE.test(low)) return { key: 'think', why: 'a debated question' };
-  if (hasDocs && /\b(summari[sz]e|overview|main points|key points|tl;?dr|outline)\b/i.test(low)) return { key: 'think', why: 'reading your files' };
-  if (REASON_RE.test(low) || COMPARE_RE.test(low)) return { key: 'think', why: 'reasoning needed' };
-  if (LOOKUP_RE.test(low) && words <= 12) return { key: 'fast', why: 'a quick fact' };
-  if (words <= 8) return { key: 'fast', why: 'a short question' };
-  return { key: 'think', why: 'a longer question' };
+  if (exactOnly || toolOnly) return { key: 'low', why: 'a quick lookup' };
+  if (words > 120 || DEEP_RE.test(low)) return { key: 'max', why: 'a big question' };
+  if (FAST_RE.test(low) && words <= 40) return { key: 'low', why: 'a simple request' };
+  if (MATH_RE.test(t) || CODE_RE.test(t)) return { key: 'high', why: 'reasoning needed' };
+  if (DEBATE_RE.test(low)) return { key: 'high', why: 'a debated question' };
+  if (hasDocs && /\b(summari[sz]e|overview|main points|key points|tl;?dr|outline)\b/i.test(low)) return { key: 'high', why: 'reading your files' };
+  if (REASON_RE.test(low) || COMPARE_RE.test(low)) return { key: 'high', why: 'reasoning needed' };
+  if (LOOKUP_RE.test(low) && words <= 12) return { key: 'low', why: 'a quick fact' };
+  if (words <= 8) return { key: 'low', why: 'a short question' };
+  return { key: 'high', why: 'a longer question' };
 }
 
 /* One short instruction that fits the question. */
@@ -5656,7 +5762,7 @@ function planBudget(mode, style, ctx, hasDocs, saver = false) {
   const roomChars = Math.floor(promptBudget * 3.5);
   const notesChars = Math.min(hasDocs ? Math.round(mode.notesChars * 0.55) : mode.notesChars, Math.floor(roomChars * 0.45));
   const docChars = hasDocs ? Math.min(mode.docChars, Math.floor(roomChars * 0.6)) : 0;
-  return { budget: think, answerMax: answer, outMax, promptBudget, notesChars, docChars, histTokens: Math.min(mode.histTokens, Math.floor(promptBudget * 0.4)) };
+  return { budget: think, answerMax: answer, outMax, promptBudget, replayMax: hardPrompt, notesChars, docChars, histTokens: Math.min(mode.histTokens, Math.floor(promptBudget * 0.4)) };
 }
 
 /* ---------- show-your-work solutions: all six parts must be there, and the arithmetic in the steps is checked by the calculator ---------- */
@@ -5693,7 +5799,7 @@ function checkArithmetic(text) {
   return { checked, wrong };
 }
 
-/* ---------- hard-question voting (Deep mode only): three tries, the most common final answer wins ----------
+/* ---------- hard-question voting (Max and Ultra effort): three or five tries, the most common final answer wins ----------
    Only for questions with a short answer that can be compared: a number, a choice, yes or no, a short phrase. It takes about 2 to 3 times as long. */
 const VOTE_SKIP = /\b(write|essay|poem|story|explain|why|opinion|should|compare|describe|discuss|summari[sz]e|translate|draft|brainstorm|ideas?|pros and cons|best way|advice|tell me about)\b/i;
 const VOTE_PUZZLE = /\b(how many|how much|how long|how far|how old|what is the (?:value|sum|total|average|mean|probability|area|perimeter|volume|speed|number|remainder|product|difference|answer)|which (?:one|of|number|is)|riddle|puzzle|logic|true or false|yes or no|solve for|find x|what comes next|next number|all but)\b/i;
@@ -5737,12 +5843,12 @@ function voteTally(attempts) {
   const pick = winner && !unsure ? attempts.find(a => a.key === winner) : null;
   return { winner: unsure ? null : winner, wins, total, unsure, pick };
 }
-/* Two more tries (not shown while they run, only the progress). They write their working in the answer, so they are faster than the first try. */
-async function voteExtra({ am, run, messages, maxTokens }) {
+/* More tries (two at Max, four at Ultra; not shown while they run, only the progress). They write their working in the answer, so they are faster than the first try. */
+async function voteExtra({ am, run, messages, maxTokens, tries = 3 }) {
   const out = [];
-  for (let k = 2; k <= 3; k++) {
+  for (let k = 2; k <= tries; k++) {
     if (run.stopped) break;
-    setWork(am, `Checking the answer again (try ${k} of 3)`, (k - 1) / 3);
+    setWork(am, `Checking the answer again (try ${k} of ${tries})`, (k - 1) / tries);
     let n = 0;
     const res = await Brain.generate({ messages, think: false, temperature: 0.7, top_p: 0.8, presence_penalty: 0.5, max_tokens: maxTokens,
       onDelta: (d, full) => { if (++n % 25 === 0 && (run.stopped || looping(full))) Brain.interrupt(); } }).catch(() => null);
@@ -5759,7 +5865,7 @@ const Bigger = (() => {
   const ORDER = ['Qwen3.5-0.8B', 'Qwen3.5-2B', 'Qwen3.5-4B', 'Qwen3.5-9B'];
   function offer(m) {
     if (!m || !m.content || m.widget || m.state !== 'done' || Brain.state === 'unsupported') return null;
-    const curKey = (MODELS.find(x => x.name === m.modelName) || { key: S.model }).key;
+    const curKey = (modelByName(m.modelName) || { key: S.model }).key;
     const i = ORDER.indexOf(curKey);
     if (i < 0 || i >= ORDER.length - 1) return null;
     const weak = confidenceOf(m)?.level === 'Low' || !!m.ground?.bad?.length || m.rating === 'down';
@@ -7009,6 +7115,10 @@ const Learn = (() => {
       const fav = interests(6), likes = likedStyles();
       sect('What Lumen noticed', fav.length ? h('div', { class: 'lrn-tags' }, ...fav.map(f => h('span', { class: 'lrn-tag', text: pretty(f.w) }))) : h('p', { class: 'hint', text: L().topics ? 'Ask a few questions and Lumen will notice which topics you come back to.' : 'Learning from your questions is switched off.' }),
         likes.length ? h('p', { class: 'hint', text: 'You seem to like ' + likes.map(k => STYLE_WORDS[k]).join(' and ') + '. Lumen now answers that way.' }) : null);
+      const eff = EffortLearn.summary();
+      sect('Effort', h('p', { class: 'hint', text: eff.length ? 'Auto gives these kinds of questions more effort, because answers at the lower level were often rated wrong or did not match their sources:' : 'When answers of one kind are often rated wrong, Auto starts giving that kind more effort. Nothing so far.' }),
+        eff.length ? h('ul', { class: 'lrn-list' }, ...eff.map(e => h('li', { text: `${e.label[0].toUpperCase() + e.label.slice(1)}: ${levelLabel(e.from)} → ${levelLabel(e.to)}` }))) : null,
+        eff.length ? h('div', { class: 'opt-row' }, h('button', { class: 'btn', type: 'button', text: 'Reset what Auto learned', onclick: () => { EffortLearn.reset(); showLearned(); } })) : null);
       const mean = meanings(), wl = wishes();
       if (mean.length) sect('Meanings you chose', h('p', { class: 'hint', text: 'When you type just one of these names, Lumen looks up the meaning you chose.' }),
         h('ul', { class: 'lrn-list' }, ...mean.slice(0, 8).map(e => h('li', {}, `“${e.label || e.key}” means ${clip(e.title, 60)} `,
@@ -7054,12 +7164,12 @@ const Teach = (() => {
 
   async function good(chat, m) {
     if (m.rating === 'up') {   // pressed again: take it back
-      m.rating = ''; Usage.addRating('u', -1);
+      m.rating = ''; Usage.addRating('u', -1); EffortLearn.note(m, null);
       if (m.likedId) { Learn.forgetLiked(m.likedId); m.likedId = ''; }
       repaint(chat, m); return;
     }
     if (m.rating === 'down') Usage.addRating('d', -1);
-    m.rating = 'up'; m.ratingWhy = ''; Usage.addRating('u', 1);
+    m.rating = 'up'; m.ratingWhy = ''; Usage.addRating('u', 1); EffortLearn.note(m, 1);
     let kept = false;
     if (canKeep(m)) { const id = await Learn.saveLiked(questionFor(chat, m), m.content).catch(() => ''); if (id) { m.likedId = id; kept = true; } }
     repaint(chat, m);
@@ -7082,13 +7192,13 @@ const Teach = (() => {
   }
   async function wrong(chat, m) {
     if (m.rating === 'down') {   // pressed again: take it back (a correction that was saved stays in Settings → Memory until you delete it)
-      m.rating = ''; m.ratingWhy = ''; Usage.addRating('d', -1);
+      m.rating = ''; m.ratingWhy = ''; Usage.addRating('d', -1); EffortLearn.note(m, null);
       repaint(chat, m); return;
     }
     const res = await wrongForm();
     if (!res.ok) return;
     if (m.rating === 'up') { Usage.addRating('u', -1); if (m.likedId) { Learn.forgetLiked(m.likedId); m.likedId = ''; } }
-    m.rating = 'down'; m.ratingWhy = res.why; Usage.addRating('d', 1);
+    m.rating = 'down'; m.ratingWhy = res.why; Usage.addRating('d', 1); EffortLearn.note(m, 0);
     const q = questionFor(chat, m);
     let saved = false, full = false;
     if (res.fix.length >= 6) {
@@ -7296,7 +7406,7 @@ async function studyMaterial(chat, topic, run, am, onStep) {
 async function runStudy(chat, userMsg, kind, topicIn) {
   const K = STUDY_KINDS[kind];
   const topic = (topicIn || '').replace(/^\s*(on|about|for|of|the topic|:)\s+/i, '').trim();
-  const run = beginRun(chat, { mode: 'fast', study: kind, style: S.style });
+  const run = beginRun(chat, { mode: 'low', study: kind, style: S.style });
   const { am } = run;
   const t0 = performance.now();
   try {
@@ -7511,7 +7621,7 @@ function essayMarkdown({ words, nParas, top, comments, rubric, dropped, clipped 
 }
 
 async function runEssay(chat, userMsg) {
-  const run = beginRun(chat, { mode: 'fast', style: S.style });
+  const run = beginRun(chat, { mode: 'low', style: S.style });
   const { am } = run;
   const t0 = performance.now();
   try {
@@ -7599,6 +7709,64 @@ function openEssayDialog(prefill = '') {
       h('label', { for: 'essayText', text: 'Your essay' }), essay, hint, h('label', { for: 'essayRubric', text: 'Rubric (optional)' }), rubric, h('div', { class: 'opt-row' }, go));
   });
 }
+
+/* ---------- Auto gets better with use: it learns which kinds of questions need more effort ----------
+   Every answer where Auto chose the level is noted with its kind (math, code, facts, writing ...) and its level. A thumbs down,
+   a detail that none of the sources contains, or tries that did not agree count as "not good enough"; a thumbs up counts as good.
+   When at least 2 of the recent answers of one kind at one level were not good enough, and not more of them were good, Auto
+   uses the next level for that kind from then on: at most two levels above its own choice, never above Max (Ultra is only chosen
+   by you). A level is tried again after 90 days. It all stays on this computer; Settings → Memory shows it and can reset it. */
+const EffortLearn = (() => {
+  const KEY = 'lumen.effort', KEEP = 12, DAYS90 = 90 * 864e5;
+  const KIND_LABEL = { math: 'math problems', code: 'code', debate: 'debated questions', compare: 'comparisons', live: 'live data', news: 'news', write: 'writing',
+    plan: 'plans', study: 'study questions', docs: 'questions about your files', facts: 'quick facts', general: 'other questions' };
+  let data = null;
+  function load() {
+    if (data) return data;
+    try { data = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { data = null; }
+    if (!data || typeof data !== 'object' || typeof data.kinds !== 'object' || !data.kinds) data = { kinds: {} };
+    return data;
+  }
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch {} };
+  const kindOf = (question, playbook) => (playbook && KIND_LABEL[playbook] ? playbook : LOOKUP_RE.test(String(question || '').toLowerCase()) ? 'facts' : 'general');
+  /* outcome: 1 good, 0 not good enough, null takes a rating back */
+  function note(m, outcome) {
+    if (!m?.auto || !KIND_LABEL[m.effortKind] || !m.level) return;
+    const d = load(), now = Date.now();
+    let list = Array.isArray(d.kinds[m.effortKind]) ? d.kinds[m.effortKind] : [];
+    const i = list.findIndex(r => r.id === m.id);
+    if (outcome == null) { if (i >= 0) list.splice(i, 1); }
+    else if (i >= 0) list[i].ok = outcome ? 1 : 0;
+    else list.push({ id: m.id, lvl: m.level, ok: outcome ? 1 : 0, t: now });
+    list = list.filter(r => r && now - r.t < DAYS90).slice(-60);
+    d.kinds[m.effortKind] = list; save();
+  }
+  /* the level Auto should use for this kind when its own first choice was `level` */
+  function adjust(kind, level, maxLevel) {
+    const list = (load().kinds[kind] || []).filter(r => Date.now() - r.t < DAYS90);
+    const cap = Math.min(maxLevel, level + 2, MODES.max.level);
+    let lvl = level;
+    while (lvl < cap) {
+      const at = list.filter(r => r.lvl === lvl).slice(-KEEP);
+      const bad = at.filter(r => !r.ok).length, good = at.length - bad;
+      if (bad >= 2 && bad >= good) lvl++; else break;
+    }
+    return lvl;
+  }
+  /* what Auto has learned so far, for Settings: [{ kind, label, from, to }] */
+  function summary() {
+    const out = [], d = load();
+    for (const kind of Object.keys(d.kinds)) {
+      if (!KIND_LABEL[kind]) continue;
+      const lvls = [...new Set((d.kinds[kind] || []).map(r => r.lvl))].sort((a, b) => a - b);
+      for (const from of lvls) { const to = adjust(kind, from, MODES.max.level); if (to > from) { out.push({ kind, label: KIND_LABEL[kind], from, to }); break; } }
+    }
+    return out;
+  }
+  function reset() { data = { kinds: {} }; save(); }
+  return { note, adjust, kindOf, summary, reset, KIND_LABEL };
+})();
+const levelLabel = n => LEVELS.find(m => m.level === n)?.label || '';
 
 /* ---------- running a turn ---------- */
 function setWork(am, text, progress = null) { am.workText = text; am.workProgress = progress; paintLive(); }
@@ -7688,14 +7856,18 @@ async function runTurn(chat, userMsg) {
   const toolHit = S.wiki === 'off' || ovr.search === 'off' || userMsg.noLookup ? false : liveToolPlan(question).length > 0;
   const exactOnly = local.lines.length > 0 && coreTerms(question).filter(w => !/^\d+$/.test(w)).length <= 3 && !REASON_RE.test(low);
   const toolOnly = toolHit && !REASON_RE.test(low);
-  let modeKey = ovr.mode || S.mode, auto = false, autoWhy = '';
-  if (MODES[modeKey]?.power && !Brain.model(S.model).power) modeKey = 'deep';   // Max needs the 9B model
-  if (MODES[modeKey]?.auto || !MODES[modeKey]) {
+  let modeKey = modeKeyOf(ovr.mode || S.mode), auto = false, autoWhy = '', effortKind = '', learned = false;
+  if (MODES[modeKey].power && !Brain.model(S.model).power) modeKey = 'max';   // Ultra needs Solvarra
+  if (MODES[modeKey].auto) {
     const pk = pickMode(question, { hasDocs: docsOn, exactOnly, toolOnly });
     modeKey = pk.key; auto = true; autoWhy = pk.why;
+    // Auto learns from ratings: kinds of questions that often went wrong at this level get more effort
+    effortKind = EffortLearn.kindOf(question, pickPlaybook(question, { hasDocs: docsOn }));
+    const lvl = EffortLearn.adjust(effortKind, MODES[modeKey].level, MODES.max.level);
+    if (lvl !== MODES[modeKey].level) { modeKey = LEVELS.find(x => x.level === lvl).key; autoWhy = `it learned that ${EffortLearn.KIND_LABEL[effortKind]} need more effort`; learned = true; }
   }
   const mode = MODES[modeKey];
-  const run = beginRun(chat, { mode: mode.key, auto, autoWhy, style });
+  const run = beginRun(chat, { mode: mode.key, level: mode.level, auto, autoWhy, style, ...(auto ? { effortKind } : {}), ...(learned ? { learned } : {}) });
   const { am } = run;
   const t0 = performance.now();
   const checkStop = run.checkStop;
@@ -7714,7 +7886,7 @@ async function runTurn(chat, userMsg) {
     // If the first search finds nothing that matches, the model is asked to fix the spelling of the search words.
     const rewrite = Saver.active() ? undefined : async () => { await ensureModel(run); checkStop(); return planQueries(question, prevUser); };
     const doGather = planned => gather({ question, prevQuestion: prevUser, plannedQueries: planned, maxArticles: mode.articles, charBudget: P.notesChars,
-      signal: run.ctl.signal, onStep, rewrite, simple: mode.key === 'deep' || mode.key === 'max' || style === 'simple', wikiOn, forceWeb: forceSearch, learned: lrn, prefer: lrn?.prefer, core: Core.enabled() && !docsOn && !exactOnly && !userMsg.noLookup && ovr.search !== 'off' })
+      signal: run.ctl.signal, onStep, rewrite, simple: mode.level >= MODES.max.level || style === 'simple', wikiOn, forceWeb: forceSearch, learned: lrn, prefer: lrn?.prefer, core: Core.enabled() && !docsOn && !exactOnly && !userMsg.noLookup && ovr.search !== 'off' })
       .catch(e => (run.stopped ? null : { offline: true, sources: [], quality: 'offline', exact: local.lines, used: [], failed: [] }));
     let notesP = !mode.plan ? doGather(null) : null;
 
@@ -7760,11 +7932,11 @@ async function runTurn(chat, userMsg) {
 
     const playbook = ovr.playbook || pickPlaybook(question, { hasDocs: !!docs, hasLive: !!(notes?.used || []).some(u => ['weather', 'fx', 'crypto'].includes(u)), hasNews: !!(notes?.used || []).some(u => ['events', 'gdelt', 'hn'].includes(u)) || !!notes?.recent });
     const exs = Examples.pick(question, playbook, { skip: !!(userMsg.study || userMsg.essay || docsOn || Saver.active() || notes?.exact?.length || ovr.vote) });
-    const built = buildMessages({ chat, userMsg, notes, exact: notes?.exact?.length ? notes.exact : local.lines, docs, budget: P.promptBudget, histTokens: P.histTokens, style, think: mode.think, playbook, examples: exs });
+    const built = buildMessages({ chat, userMsg, notes, exact: notes?.exact?.length ? notes.exact : local.lines, docs, budget: P.promptBudget, histTokens: P.histTokens, style, think: mode.think, playbook, examples: exs, replayMax: P.replayMax });
     if (built.examples?.length) am.examples = built.examples;
     if (built.truncated) am.note = 'Your message was very long, so Lumen read only the first part';
-    // Voting: Deep mode, a short checkable answer; the model is asked to end with "Final answer: X"
-    const voting = (mode.key === 'deep' || mode.key === 'max') && !Saver.active() && !docsOn && !notes?.exact?.length && !userMsg.study && !userMsg.essay && (ovr.vote || (S.vote.on && voteWorthy(question))) && !!built.messages.length;
+    // Voting: Max or Ultra effort, a short checkable answer; the model is asked to end with "Final answer: X"
+    const voting = !!mode.tries && !Saver.active() && !docsOn && !notes?.exact?.length && !userMsg.study && !userMsg.essay && (ovr.vote || (S.vote.on && voteWorthy(question))) && !!built.messages.length;
     if (voting) { const lu = built.messages[built.messages.length - 1]; built.messages[built.messages.length - 1] = { ...lu, content: lu.content + VOTE_ASK }; }
     const grounded = !!(notes?.block || docs?.block || notes?.exact?.length);   // the answer rests on sources: steadier sampling
     setWork(am, mode.think ? 'Thinking it through' : 'Writing the answer', mode.think ? 0 : null);
@@ -7778,8 +7950,9 @@ async function runTurn(chat, userMsg) {
     let kind = mode.think ? null : 'answer';
     const thinkingNow = () => mode.think && kind !== 'answer';
     const toAnswer = () => { kind = 'answer'; am.thinking = ''; am.tThink0 = 0; thinkTokens = 0; };
+    if (built.replay) am.replay = true;
     const res = await Brain.generate({
-      messages: built.messages, think: mode.think, ...samplingFor(mode.think, grounded), max_tokens: P.outMax,
+      messages: built.messages, think: mode.think, ...samplingFor(mode.think, grounded), max_tokens: P.outMax, tag: { chat: chat.id, am: am.id },
       onDelta: (d, full) => {
         raw = full; tokens++;
         if (kind === null) {
@@ -7843,7 +8016,7 @@ async function runTurn(chat, userMsg) {
     if (am._packText?.length && am.content) { const n = Examples.copiedRun(am.content, am._packText.map(a => ({ a }))); if (n >= 8) am.packCopy = n; }
     if (voting && am.content && !run.stopped && !answerLoop && finalAnswerOf(am.content)) {
       const first = { text: am.content, ans: finalAnswerOf(am.content) }; first.key = voteKey(first.ans);
-      const extra = first.key ? await voteExtra({ am, run, messages: built.messages, maxTokens: P.answerMax }) : [];
+      const extra = first.key ? await voteExtra({ am, run, messages: built.messages, maxTokens: P.answerMax, tries: mode.tries }) : [];
       if (!run.stopped && extra.length) {
         const tries = [first, ...extra.map(t => { const a = finalAnswerOf(t); return { text: t, ans: a, key: voteKey(a) }; })];
         const v = voteTally(tries);
@@ -7871,7 +8044,7 @@ async function runTurn(chat, userMsg) {
       const pool = Ground.poolOf(built.messages);
       const g = Ground.check(am.content, pool);
       am.ground = { n: g.total, bad: g.flagged.map(f => f.text) };
-      if (g.flagged.length && S.check && !Saver.active() && !answerLoop && finish !== 'length') {
+      if (g.flagged.length && S.check && mode.check !== false && !Saver.active() && !answerLoop && finish !== 'length') {
         setWork(am, 'Checking the answer against the sources', null);
         const fix = await Brain.generate({ messages: [...built.messages, { role: 'assistant', content: am.content }, { role: 'user', content: Ground.repairMessage(g.flagged) }],
           think: false, ...samplingFor(false), temperature: 0.3, top_p: 0.8, max_tokens: P.answerMax }).catch(() => null);
@@ -7890,6 +8063,7 @@ async function runTurn(chat, userMsg) {
     am.playbook = playbook;
     Saver.noteSpeed(tps, am.stats.tokens);
     am.state = run.stopped ? 'stopped' : 'done';
+    if (auto && !run.stopped && (am.ground?.bad?.length || am.vote?.unsure)) EffortLearn.note(am, 0);   // not good enough: a detail no source has, or tries that disagreed
     if (finish === 'length' && !run.stopped && !answerLoop) { am.cutLength = true; am.content += '\n\n*(The answer hit the length limit. Press “Continue” for more.)*'; }
   } catch (e) {
     if (run.stopped || e?.message === 'stopped') am.state = 'stopped';
@@ -8211,7 +8385,7 @@ const LAB_PUZZLES = [{"id": "m1", "q": "What is 17 × 23?", "ans": "391"}, {"id"
 const LAB_SPEED = ["Explain how a rainbow forms, in about 100 words.", "Why do we need to sleep? Answer in about 100 words.", "Describe how a bicycle works, in about 100 words.", "What makes the tides rise and fall? Answer in about 100 words.", "Explain what a prime number is, with two examples, in about 100 words."];
 
 /* ---------- Test lab: numbers instead of guesses (model test, quick check, speed, prompt A/B, examples A/B, voting test) ----------
-   Every test runs the real Lumen prompt on the model that is loaded, at temperature 0 with a fixed seed, in Fast mode, with no web look-up,
+   Every test runs the real Lumen prompt on the model that is loaded, at temperature 0 with a fixed seed, at Low effort, with no web look-up,
    so two runs can be compared. Questions: lab-questions.json (50 + 20 puzzles). Nothing leaves the computer. */
 const LabScore = {
   plain: t => String(t || '').replace(/```[\s\S]*?```/g, ' ').replace(/[*_#>`|]/g, ' ').replace(/\s+/g, ' ').trim(),
@@ -8536,7 +8710,7 @@ const Lab = (() => {
     return s;
   }
   function reportMarkdown() {
-    const rows = modelTable(), out = ['# Lumen test report', '', `Made on ${new Date().toLocaleString('en-GB')}. Fast mode, temperature 0, seed ${SEED}, no web look-up.`, ''];
+    const rows = modelTable(), out = ['# Lumen test report', '', `Made on ${new Date().toLocaleString('en-GB')}. Low effort, temperature 0, seed ${SEED}, no web look-up.`, ''];
     if (rows.length) {
       out.push('## Models', '', '| Model | Test | facts | explain | math | write | honest | total | tok/s | first word (ms) | s per answer | load (s) | download (MB) | memory estimate (MB) |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
       for (const r of rows) out.push(r.crashed ? `| ${r.modelName} | crashed or froze${r.error ? ': ' + r.error : ''} | | | | | | | | | | | | |` : `| ${r.modelName} | ${r.set} | ${['facts', 'explain', 'math', 'write', 'honest'].map(c => r.sum.cats[c] ?? '').join(' | ')} | ${r.sum.total} | ${r.sum.tps} | ${r.sum.ttft} | ${r.sum.secs} | ${r.loadSec ?? ''} | ${r.downloadMB ?? Brain.model(r.model)?.downloadMB ?? ''} | ${r.mem?.vramMB ?? ''} |`);
@@ -8617,7 +8791,7 @@ function openLab() {
     const checks = MODELS.map(m => {
       const inp = h('input', { type: 'checkbox', id: 'lab-m-' + m.key }); inp.checked = labUI.models.has(m.key);
       inp.addEventListener('change', () => { inp.checked ? labUI.models.add(m.key) : labUI.models.delete(m.key); });
-      return h('label', { class: 'lab-chk', for: 'lab-m-' + m.key }, inp, h('span', {}, h('b', { text: m.name }), h('i', { text: ` ${(m.downloadMB / 1000).toFixed(1)} GB, about ${(m.vramMB / 1000).toFixed(1)} GB of memory. ` + (Brain.cached[m.key] ? 'On this computer.' : 'Not downloaded yet: it will be downloaded now.') })));
+      return h('label', { class: 'lab-chk', for: 'lab-m-' + m.key }, inp, h('span', {}, h('b', { text: m.name }), h('i', { text: ` ${m.base}, ${(m.downloadMB / 1000).toFixed(1)} GB, about ${(m.vramMB / 1000).toFixed(1)} GB of memory. ` + (Brain.cached[m.key] ? 'On this computer.' : 'Not downloaded yet: it will be downloaded now.') })));
     });
     const sel = h('select', { id: 'labSet', 'aria-label': 'Question set' }, h('option', { value: 'quick', text: 'Quick set (15 questions, about 5 minutes each)' }), h('option', { value: 'full', text: 'Full set (50 questions, about 15 minutes each)' }));
     sel.value = labUI.set; sel.addEventListener('change', () => { labUI.set = sel.value; });
@@ -8666,7 +8840,7 @@ function openLab() {
     if (v) {
       kids.push(h('div', { class: 'lab-result ' + (v.helps ? 'good' : '') }, h('b', { text: `One try: ${v.acc1}% right. Vote of three: ${v.acc3}% right (${sd(v.gain, 1)} points).` }),
         h('span', { text: `The vote fixed ${v.fixed} puzzle${v.fixed === 1 ? '' : 's'} the first try got wrong, and spoiled ${v.broke}. ${v.unsure} puzzle${v.unsure === 1 ? '' : 's'} ended with “not sure”. ${v.helps ? 'It clearly helps, so it is worth turning on.' : 'The gain is not clear, so it is better left off.'}` }), h('small', { text: `On ${v.modelName}, ${when(v.at)}.` })));
-      kids.push(h('div', { class: 'row' }, btn(S.vote.on ? 'Turn voting off' : 'Turn voting on', () => { S.vote.on = !S.vote.on; saveSettings(); toast(S.vote.on ? 'Voting is on (Deep mode, short answers).' : 'Voting is off.'); openLab(); })));
+      kids.push(h('div', { class: 'row' }, btn(S.vote.on ? 'Turn voting off' : 'Turn voting on', () => { S.vote.on = !S.vote.on; saveSettings(); toast(S.vote.on ? 'Voting is on (Max and Ultra effort, short answers).' : 'Voting is off.'); openLab(); })));
     }
     return sec('Voting test', ...kids);
   }
@@ -8698,7 +8872,7 @@ function openLab() {
   }
   function build() {
     root.replaceChildren(live(),
-      p(`Everything here runs on this computer, on the model that is loaded now (${Brain.model(S.model).name}). Tests use Fast mode, temperature 0 and a fixed seed, with no web look-up, so two runs can be compared. While a test runs, the chat is locked.`),
+      p(`Everything here runs on this computer, on the model that is loaded now (${Brain.model(S.model).name}). Tests use Low effort, temperature 0 and a fixed seed, with no web look-up, so two runs can be compared. While a test runs, the chat is locked.`),
       checkSection(), modelSection(), abSection(), voteSection(), speedSection(), reportSection());
   }
   const signature = () => JSON.stringify([Lab.runs().length, Lab.runs()[0]?.id, Lab.queue()?.i, Lab.live.busy, Brain.state, Object.keys(Lab.baseline()).length, S.promptVersion, S.vote.on]);
@@ -8871,7 +9045,7 @@ async function runSlash(sl, raw, opts = {}) {
   const needArg = (what) => { toast(`Add ${what} after /${cmd}.`); return true; };
   switch (cmd) {
     case 'new': clear(); newChat(); return true;
-    case 'export': { clear(); const c = current(); if (c?.messages.length) downloadFile(`${safeName(c.title)}.md`, chatToMarkdown(c)); else toast('There is nothing to save yet.'); return true; }
+    case 'export': { clear(); const c = current(); if (c?.messages.length) downloadFile(`${safeName(c.title)}.md`, chatToMarkdown(c), 'text/markdown', 'mixed'); else toast('There is nothing to save yet.'); return true; }
     case 'settings': clear(); openSettings(); return true;
     case 'learned': clear(); Learn.showLearned(); return true;
     case 'help': clear(); showHelp(); return true;
@@ -8892,10 +9066,11 @@ async function runSlash(sl, raw, opts = {}) {
       return true;
     }
     case 'search': if (!arg) return needArg('your question'); await maybeReadLinks(arg); await send(arg, { ovr: { search: 'on' }, cmd }); return true;
-    case 'max': if (!Brain.model(S.model).power) { toast('Max needs the Qwen3.5 9B model. Choose it in Settings → AI model.'); return true; } if (!arg) return needArg('your question'); await send(arg, { ovr: { mode: 'max' }, cmd }); return true;
-    case 'deep': case 'fast': case 'think': if (!arg) return needArg('your question'); await send(arg, { ovr: { mode: cmd }, cmd }); return true;
-    case 'solve': if (!arg) return needArg('a problem, like /solve a car drives 150 km in 2 hours, what is its speed?'); await send(arg, { ovr: { playbook: 'math', mode: 'think' }, cmd }); return true;
-    case 'vote': if (!arg) return needArg('a puzzle, like /vote a farmer has 17 sheep and all but 9 run away, how many are left?'); await send(arg, { ovr: { mode: 'deep', vote: true }, cmd }); return true;
+    case 'ultra': if (!Brain.model(S.model).power) { toast('Ultra needs Solvarra (Qwen3.5 9B). Choose it in the model picker.'); return true; } if (!arg) return needArg('your question'); await send(arg, { ovr: { mode: 'ultra' }, cmd }); return true;
+    case 'instant': case 'low': case 'medium': case 'high': case 'xhigh': case 'max':
+    case 'deep': case 'fast': case 'think': if (!arg) return needArg('your question'); await send(arg, { ovr: { mode: modeKeyOf(cmd) }, cmd }); return true;
+    case 'solve': if (!arg) return needArg('a problem, like /solve a car drives 150 km in 2 hours, what is its speed?'); await send(arg, { ovr: { playbook: 'math', mode: 'high' }, cmd }); return true;
+    case 'vote': if (!arg) return needArg('a puzzle, like /vote a farmer has 17 sheep and all but 9 run away, how many are left?'); await send(arg, { ovr: { mode: 'max', vote: true }, cmd }); return true;
     case 'lab': clear(); openLab(); return true;
     case 'role': {
       clear();
@@ -8906,21 +9081,21 @@ async function runSlash(sl, raw, opts = {}) {
     }
     case 'essay': clear(); openEssayDialog(arg); return true;
     case 'review': clear(); Review.show(); return true;
-    case 'both': if (!arg) return needArg('a debate question, like /both should schools ban phones'); await send(arg, { ovr: { playbook: 'debate', mode: 'think' }, cmd }); return true;
+    case 'both': if (!arg) return needArg('a debate question, like /both should schools ban phones'); await send(arg, { ovr: { playbook: 'debate', mode: 'high' }, cmd }); return true;
     case 'simple': case 'short': case 'tutor': if (!arg) return needArg('your question'); await send(arg, { ovr: { style: cmd }, cmd }); return true;
     case 'summarize': {
       const c = current();
-      if (arg) { await send(arg.length > 60 ? `Summarize this in five bullet points:\n\n${arg}` : `Summarize: ${arg}`, { ovr: { mode: 'think' }, cmd }); return true; }
-      if (docsOf(c).length || App.pending.length) { await send('Summarize the attached ' + (docsOf(c).length + App.pending.length > 1 ? 'files.' : 'file.'), { ovr: { mode: 'think', docs: true }, cmd }); return true; }
+      if (arg) { await send(arg.length > 60 ? `Summarize this in five bullet points:\n\n${arg}` : `Summarize: ${arg}`, { ovr: { mode: 'high' }, cmd }); return true; }
+      if (docsOf(c).length || App.pending.length) { await send('Summarize the attached ' + (docsOf(c).length + App.pending.length > 1 ? 'files.' : 'file.'), { ovr: { mode: 'high', docs: true }, cmd }); return true; }
       return needArg('the text to summarize, or attach a file first');
     }
     case 'weather': {
       const place = arg || S.city;
       if (!place) return needArg('a place, like /weather Paris');
-      await send(`What is the weather in ${place}?`, { ovr: { mode: 'fast' }, cmd }); return true;
+      await send(`What is the weather in ${place}?`, { ovr: { mode: 'low' }, cmd }); return true;
     }
-    case 'convert': if (!arg) return needArg('an amount, like /convert 5 miles in km'); await send(`Convert ${arg}`, { ovr: { mode: 'fast' }, cmd }); return true;
-    case 'time': await send(arg ? `What time is it in ${arg}?` : 'What time is it now, and what is today’s date?', { ovr: { mode: 'fast' }, cmd }); return true;
+    case 'convert': if (!arg) return needArg('an amount, like /convert 5 miles in km'); await send(`Convert ${arg}`, { ovr: { mode: 'low' }, cmd }); return true;
+    case 'time': await send(arg ? `What time is it in ${arg}?` : 'What time is it now, and what is today’s date?', { ovr: { mode: 'low' }, cmd }); return true;
   }
   return false;
 }
@@ -9147,7 +9322,7 @@ document.addEventListener('fullscreenchange', () => { if (!document.fullscreenEl
 function slidesToHtml(d, forPrint) {
   const all = deckSlides(d);
   const body = all.map((s, i) => `<section class="s${s.cover ? ' cover' : ''}"${i ? '' : ' data-first'}><h1>${esc(s.title)}</h1>${s.cover ? (s.sub ? `<p class="sub">${esc(s.sub)}</p>` : '') : `<ul>${s.bullets.map(b => `<li>${esc(b)}</li>`).join('')}</ul>`}${s.notes ? `<aside>${esc(s.notes)}</aside>` : ''}</section>`).join('\n');
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="generator" content="Lumen (AI-generated content)"><title>${esc(d.title)}</title>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="generator" content="Lumen (AI-generated content)"><meta name="ai-generated" content="true"><meta name="digital-source-type" content="${IPTC_AI}"><title>${esc(d.title)}</title>
 <style>
 :root{--bg:#FAF8F3;--ink:#24221D;--acc:#2E6B66;--lamp:#B8742A}
 *{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:20px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
@@ -9366,17 +9541,17 @@ function showMessageMenu(anchor, chat, m) {
   const redo = (label, icon_, ovr, desc) => ({ icon: icon_, label, desc, hidden: !isLast || App.run || m.widget, run: () => regenerate(chat, m, ovr) });
   showActions(anchor, 'More', [
     { title: 'Answer again', items: [
-      redo('Think harder', 'layers', { mode: 'deep' }, 'Deep mode: more thinking, more sources'),
-      ...(Brain.model(S.model).power ? [redo('Think the hardest (Max)', 'layers', { mode: 'max' }, 'Max mode: the longest thinking and the most sources')] : []),
-      redo('Answer faster', 'bolt', { mode: 'fast' }, 'No thinking step'),
+      redo('Think harder', 'layers', { mode: levelStep(m.mode || 'high', 1) }, `${modeOf(levelStep(m.mode || 'high', 1)).label} effort: more thinking, more sources`),
+      redo(`Think the hardest (${modeOf(levelStep('ultra', 0)).label})`, 'layers', { mode: levelStep('ultra', 0) }, `${modeOf(levelStep('ultra', 0)).label} effort: the longest thinking and the most sources`),
+      redo('Answer faster', 'bolt', { mode: 'low' }, 'Low effort: no thinking step'),
       redo('Search first', 'globe', { search: 'on' }, 'Look it up again, including the web'),
       redo('Without searching', 'x', { search: 'off' }, 'Use only what the AI remembers'),
     ] },
     { title: 'Change the answer', items: m.widget || !m.content || !isLast || App.run ? [] : [
-      { icon: 'text', label: 'Shorter', run: () => submitText('Make your last answer shorter: keep only the most important points.', { noLookup: true, ovr: { mode: 'fast' } }) },
-      { icon: 'text', label: 'Longer', run: () => submitText('Make your last answer longer and more detailed, with one more example.', { noLookup: true, ovr: { mode: 'think' } }) },
-      { icon: 'pen', label: 'More casual', run: () => submitText('Rewrite your last answer in a more casual, friendly tone. Keep the facts the same.', { noLookup: true, ovr: { mode: 'fast' } }) },
-      { icon: 'pen', label: 'More formal', run: () => submitText('Rewrite your last answer in a more formal, professional tone. Keep the facts the same.', { noLookup: true, ovr: { mode: 'fast' } }) },
+      { icon: 'text', label: 'Shorter', run: () => submitText('Make your last answer shorter: keep only the most important points.', { noLookup: true, ovr: { mode: 'low' } }) },
+      { icon: 'text', label: 'Longer', run: () => submitText('Make your last answer longer and more detailed, with one more example.', { noLookup: true, ovr: { mode: 'high' } }) },
+      { icon: 'pen', label: 'More casual', run: () => submitText('Rewrite your last answer in a more casual, friendly tone. Keep the facts the same.', { noLookup: true, ovr: { mode: 'low' } }) },
+      { icon: 'pen', label: 'More formal', run: () => submitText('Rewrite your last answer in a more formal, professional tone. Keep the facts the same.', { noLookup: true, ovr: { mode: 'low' } }) },
     ] },
     { title: 'Open', items: [
       { icon: 'doc', label: 'Open as a document', desc: 'In the side panel, to read, edit or save', hidden: !m.content || !!m.widget, run: () => openAsDocument(chat, m) },
@@ -9407,7 +9582,7 @@ function showChatMenu(anchor = els.moreBtn) {
       { icon: 'folder', label: c.project ? 'Move to another project' : 'Add to a project', desc: projs.length ? '' : 'Make a project first', hidden: !projs.length && !c.project, run: () => moveToProject(c, anchor) },
     ] },
     { items: [
-      { icon: 'download', label: 'Save as a file', desc: 'Markdown', run: () => downloadFile(`${safeName(c.title)}.md`, chatToMarkdown(c)) },
+      { icon: 'download', label: 'Save as a file', desc: 'Markdown', run: () => downloadFile(`${safeName(c.title)}.md`, chatToMarkdown(c), 'text/markdown', 'mixed') },
       { icon: 'print', label: 'Print or save as PDF', run: () => printHtml(chatToHtml(c)) },
       { icon: 'copy', label: 'Copy the whole chat', desc: 'As Markdown', run: () => copyText(chatToMarkdown(c)) },
       { icon: 'file', label: 'Show the memory summary', hidden: !c.summary, run: () => openViewer('Summary of the earlier chat', () => h('p', { class: 'readsum', text: c.summary })) },
@@ -9418,7 +9593,7 @@ function showChatMenu(anchor = els.moreBtn) {
 els.moreBtn.addEventListener('click', () => {
   const c = current(); if (!c) return;
   showActions(els.moreBtn, 'Export this chat', [{ items: [
-    { icon: 'download', label: 'Save as a Markdown file', run: () => downloadFile(`${safeName(c.title)}.md`, chatToMarkdown(c)) },
+    { icon: 'download', label: 'Save as a Markdown file', run: () => downloadFile(`${safeName(c.title)}.md`, chatToMarkdown(c), 'text/markdown', 'mixed') },
     { icon: 'print', label: 'Print or save as PDF', run: () => printHtml(chatToHtml(c)) },
     { icon: 'copy', label: 'Copy the whole chat', desc: 'As Markdown, to paste anywhere', run: () => copyText(chatToMarkdown(c)) },
   ] }], { below: true, right: true });
@@ -9661,10 +9836,10 @@ function renderModelChip() {
 function showModelMenu() {
   const fit = Setup.fit();
   showActions(els.modelChip, 'AI model', [
-    { items: MODELS.map(m => {
+    { items: [...MODELS].sort((x, y) => x.downloadMB - y.downloadMB).map(m => {
       const saved = Brain.cached[m.key], running = Brain.state === 'ready' && Brain.loadedKey === m.key;
       const hint = fit[m.key] === 'best' ? 'Best for this computer · ' : fit[m.key] === 'big' ? 'May be too big for this computer · ' : '';
-      return { icon: m.power ? 'layers' : m.key === 'Qwen3.5-0.8B' ? 'bolt' : 'spark', label: m.name, desc: hint + (running ? 'Running now' : saved ? 'Saved in this browser' : `Download ${fmtMB(m.downloadMB)}`) + ` · ${m.tag}`,
+      return { icon: m.power ? 'layers' : m.key === 'Qwen3.5-0.8B' ? 'bolt' : 'spark', label: m.name, desc: `${m.blurb} · ${m.base} · ` + hint + (running ? 'Running now' : saved ? 'Saved' : fmtMB(m.downloadMB)),
         tail: S.model === m.key ? icon('check', 16) : '', run: () => chooseModel(m) };
     }) },
     { items: [
@@ -9920,7 +10095,10 @@ const mail = () => h('a', { href: 'mailto:' + LEGAL.email, text: LEGAL.email });
 const LEGAL_PAGES = {
   about: { title: 'About Lumen and its limits', build: () => [
     lh('You are chatting with an AI, not a human'),
-    lp(`Lumen is an AI chatbot. Its answers are written by an AI language model (${Brain.model(S.model).name}, made by Alibaba Cloud) that runs on your own computer, in your browser. Lumen is a free hobby project by ${LEGAL.who} in ${LEGAL.where}. It is not a company.`),
+    lp(`Lumen is an AI chatbot. Its answers are written by an AI language model that runs on your own computer, in your browser: right now ${Brain.model(S.model).name}, which is Lumen’s name for ${Brain.model(S.model).base}, made by the Qwen team at Alibaba Cloud. Lumen is a free hobby project by ${LEGAL.who} in ${LEGAL.where}. It is not a company.`),
+    lh('The models and their names'),
+    lul([...MODELS].sort((a, b) => a.downloadMB - b.downloadMB).map(m => `${m.name}: ${m.base} (${m.blurb.toLowerCase()}).`)),
+    lp('These four names were made up for Lumen. They are not separate models: Lumen runs the Qwen3.5 models as the Qwen team published them (converted to run in a browser by the MLC project), without changing or retraining them. Alibaba does not use these names and has nothing to do with Lumen.'),
     lh('How it works'),
     lp('For many questions Lumen first looks things up (Wikipedia, news, weather and more). It gives the AI that text as reference notes, and the AI writes the answer in its own words. The sources are shown under the answer. Tap “What Lumen read” in the answer menu to see everything the AI was given.'),
     lh('What it cannot do well'),
@@ -9928,10 +10106,17 @@ const LEGAL_PAGES = {
       'It is a small AI model. It makes mistakes. It can state wrong facts, dates, numbers, names and quotes as if they were true, and it can invent sources.',
       'The AI’s own knowledge ends around the end of 2025. For newer things it needs a source.',
       'It can say untrue things about real people. Do not trust it for facts about private persons.',
-      'Bigger models (the 4B and the 9B) make fewer mistakes, but they still make them. The 9B model and Max mode need a strong computer (about 16 GB of memory) and are slower. On a computer that is too small the browser can stop or restart the page.',
+      'Bigger models (Radivane and Solvarra) make fewer mistakes, but they still make them. Solvarra and the Ultra effort need a strong computer (about 16 GB of memory) and are slower. On a computer that is too small the browser can stop or restart the page.',
       'The “Confidence” label only says whether sources were found. It does not prove that an answer is right.',
       'Lumen gives no medical, legal, money, mental-health or other professional advice. In an emergency call 112.',
       'Check important things yourself. Do not use Lumen alone for exams, health, money or safety decisions.']),
+    lh('Effort, and how Lumen improves'),
+    lp('The effort setting (Instant, Low, Medium, High, Extra high, Max and Ultra) decides how long the AI may think, how much it reads and whether it answers a checkable question several times. More effort is slower and usually more careful, but never guarantees a right answer. Auto picks the effort for each question, and on this computer it learns from your thumbs up and down which kinds of questions need more. Nothing about this leaves your computer.'),
+    lh('How Lumen shows that it is an AI'),
+    lul(['The first screen and the line under the message box say that you are chatting with an AI.',
+      'Under each answer you see the effort that was used; point at it to see which AI model wrote it.',
+      'Answers you copy end with “(' + AI_LABEL + ')” (you can switch this off in Settings, for example for code).',
+      'Files you save (Markdown and web pages) say at the end that they were made by an AI, and also carry a machine-readable note for software: “front matter” at the top of Markdown files and meta tags in web pages, with the IPTC code for AI-made content. Lumen does not hide a watermark in the wording of answers.']),
     lh('Who it is for'),
     lp('Lumen is recommended for people aged 15 and over. Younger people should use it together with a parent or guardian.'),
     lh('If you are struggling'),
@@ -9946,8 +10131,9 @@ const LEGAL_PAGES = {
     lh('Your chats stay on your device'),
     lp('The AI model runs inside your browser. Your messages and Lumen’s answers are not sent to me or to any AI company. I cannot see, read or get them back.'),
     lh('What is saved on your device'),
-    lul(['Your chats and your projects (their instructions and files), in the browser’s database (IndexedDB). Temporary chats are never saved.', 'Your settings, memory, learned habits, your own answer styles and your answers to the setup questions (which computer this is, its memory, what you use Lumen for) (localStorage).', 'Usage numbers: how many answers and tokens, how many answers you marked good or wrong, how many were checked against sources, and how long Lumen was open and in use, one small line per day (localStorage). They hold no text from your chats.', 'Notes from look-ups, answers you marked as good, and files you added, as short saved text (IndexedDB). A correction you type after marking an answer wrong is saved with your memory.',
-      'The offline Wikipedia copy, only if you add one (IndexedDB).', 'While the AI works, a tiny note (which model, how long, whether the tab is in front) in this tab’s session storage. It is removed when the answer ends, and it is used only to explain a page restart. A short list of recent restarts is kept with your settings.', 'The AI model files and a copy of this page so it opens without internet (browser storage: the Cache API, or the site’s private file storage if the browser damaged files in the Cache API).']),
+    lul(['Your chats and your projects (their instructions and files), in the browser’s database (IndexedDB). Temporary chats are never saved.', 'Your settings, memory, learned habits, your own answer styles and your answers to the setup questions (which computer this is, its memory, what you use Lumen for) (localStorage).', 'What Auto learned about effort: for each kind of question (for example math or code), the effort level and whether you rated the answer good or wrong, for up to 90 days. It holds no text from your chats (localStorage). You can reset it in “What Lumen has learned”.', 'Usage numbers: how many answers and tokens, how many answers you marked good or wrong, how many were checked against sources, and how long Lumen was open and in use, one small line per day (localStorage). They hold no text from your chats.', 'Notes from look-ups, answers you marked as good, and files you added, as short saved text (IndexedDB). A correction you type after marking an answer wrong is saved with your memory.',
+      'The offline Wikipedia copy, only if you add one (IndexedDB).', 'While the AI works, a tiny note (which model, how long, whether the tab is in front) in this tab’s session storage. It is removed when the answer ends, and it is used only to explain a page restart. A short list of recent restarts is kept with your settings.', 'The AI model files and a copy of this page so it opens without internet (browser storage: the Cache API, or the site’s private file storage if the browser damaged files in the Cache API).',
+      'While a chat is open, the AI engine keeps that chat in your graphics chip’s memory, so a follow-up question is answered faster. This is never written to disk and is gone when you close the page or switch to another chat or model.']),
     lp('Lumen needs this to work the way you asked, so there is no cookie banner. Lumen uses no tracking, no analytics, no ads and no accounts.'),
     h('div', { class: 'row' }, h('button', { class: 'btn', type: 'button', text: 'Delete all my data…', onclick: () => { closeLegal(); openSettings('storage'); } })),
     lp('You can delete everything at any time in Settings → Data and privacy → “Delete all my data”, or by clearing this site’s data in your browser.'),
@@ -9974,16 +10160,17 @@ const LEGAL_PAGES = {
       [h('b', { text: 'What Lumen is. ' }), `Lumen is a free, experimental AI chatbot made by ${LEGAL.who} as a hobby project. It is provided “as is” and “as available”, with no promise that it is correct, always working or right for any purpose.`],
       [h('b', { text: 'AI can be wrong. ' }), 'Answers are made automatically. They can be false, incomplete, out of date, biased or offensive. Lumen may say untrue things about real people. Always check important information.'],
       [h('b', { text: 'No professional advice. ' }), 'Nothing from Lumen is medical, legal, financial, psychological or other professional advice. In an emergency call 112. If you are in crisis, call a helpline (see “About Lumen and its limits”).'],
-      [h('b', { text: 'Your responsibility. ' }), 'You are responsible for what you ask and for how you use the answers. Answers made by an AI may not be protected by copyright, and I claim no rights in them. If you copy text that comes from Wikipedia, say so (CC BY-SA 4.0).'],
+      [h('b', { text: 'Your responsibility. ' }), 'You are responsible for what you ask and for how you use the answers. Answers made by an AI may not be protected by copyright, and I claim no rights in them. If you copy text that comes from Wikipedia, say so (CC BY-SA 4.0). If you publish text from Lumen to inform the public about matters of public interest, EU law (the AI Act, Article 50(4)) may require you to say that it was made by an AI, unless a person reviewed it and takes editorial responsibility for it.'],
       [h('b', { text: 'Not allowed. ' }), 'Do not use Lumen to break the law; to make content that sexually exploits children; to plan violence, terrorism or weapons (including chemical, biological, nuclear or cyber weapons); to harass, threaten, defame or pretend to be another person; to make spam, malware or fraud; or to get around the safety features of the AI model.'],
       [h('b', { text: 'Liability. ' }), 'As far as the law allows, I am not liable for any damage from using Lumen. This does not limit liability that the law does not allow me to exclude, for example for intent or gross negligence.'],
-      [h('b', { text: 'Other people’s material. ' }), 'Lumen uses an AI model by Alibaba Cloud and text from Wikipedia and other sources. See Credits.'],
+      [h('b', { text: 'Other people’s material. ' }), 'Lumen uses AI models by the Qwen team at Alibaba Cloud (Qwen3.5, which Lumen calls Sparvelle, Lanthelle, Radivane and Solvarra) and text from Wikipedia and other sources. See Credits.'],
       [h('b', { text: 'Changes. ' }), 'I may change or stop Lumen, or these terms, at any time. Slovenian law applies, without taking away rights you have under the mandatory consumer law of your country.']]),
     lp('Contact: ', mail(), '.'),
   ] },
   credits: { title: 'Credits', build: () => [
     lh('AI model'),
     lp(ext('https://huggingface.co/Qwen', 'Qwen3.5'), ' by the Qwen team at Alibaba Cloud, under the ', ext('https://www.apache.org/licenses/LICENSE-2.0', 'Apache License 2.0'), ' (licence checked on 12 October 2026 for the 0.8B, 2B and 4B models, and on 13 October 2026 for the 9B model). The model files used here were converted to the MLC format by the ', ext('https://github.com/mlc-ai/mlc-llm', 'MLC project'), '. Lumen is not made by, connected to, or endorsed by Alibaba.'),
+    lp('In Lumen the models are called Sparvelle (Qwen3.5 0.8B), Lanthelle (Qwen3.5 2B), Radivane (Qwen3.5 4B) and Solvarra (Qwen3.5 9B). These names were made up for Lumen and are not Alibaba’s; the models themselves are used as published, without changes.'),
     lh('Wikipedia'),
     lp('Text from ', ext('https://en.wikipedia.org', 'Wikipedia'), ' (and Simple English Wikipedia, Wiktionary and Wikivoyage) is written by Wikipedia contributors and shared under the ', ext('https://creativecommons.org/licenses/by-sa/4.0/', 'Creative Commons Attribution-ShareAlike 4.0 licence'), ' (CC BY-SA 4.0). Lumen shows the article it used under each answer. If you add an offline Wikipedia copy, its text is shortened and has no pictures. Wikipedia® is a trademark of the Wikimedia Foundation. Lumen is not connected to or endorsed by the Wikimedia Foundation.'),
     lh('Software'),
@@ -10068,12 +10255,12 @@ function paletteActions() {
     mk('sun', 'Switch theme (light, dark, automatic)', () => { S.theme = { system: 'light', light: 'dark', dark: 'system' }[S.theme] || 'system'; saveSettings(); applyTheme(); toast('Theme: ' + ({ system: 'match computer', light: 'light', dark: 'dark' }[S.theme])); }),
     mk('panel', 'Show or hide the sidebar', () => setRail(narrow() ? !els.app.classList.contains('nav-open') : els.app.classList.contains('rail-off')), { hint: `${MOD}B` }),
   ];
-  for (const m of modesFor()) out.push(mk(m.icon, `Thinking: ${m.label}`, () => { S.mode = m.key; saveSettings(); renderPills(); toast('Thinking mode: ' + m.label); }, { desc: m.desc }));
+  for (const m of modesFor()) out.push(mk(m.icon, `Effort: ${m.label}`, () => { S.mode = m.key; saveSettings(); renderPills(); toast('Effort: ' + m.label); }, { desc: m.desc }));
   for (const [k, v] of Object.entries(WIKI_MODES)) out.push(mk('globe', `Search: ${v.label}`, () => { S.wiki = k; saveSettings(); renderPills(); toast('Look-ups: ' + v.label); }, { desc: v.desc }));
   for (const [k, v] of Object.entries(STYLES)) out.push(mk('text', `Answer style: ${v.label}`, () => { S.style = k; saveSettings(); renderPills(); toast('Answer style: ' + v.label); }, { desc: v.desc }));
   const c = current();
   if (c?.messages.length) {
-    out.push(mk('download', 'Save this chat as a file', () => downloadFile(`${safeName(c.title)}.md`, chatToMarkdown(c))));
+    out.push(mk('download', 'Save this chat as a file', () => downloadFile(`${safeName(c.title)}.md`, chatToMarkdown(c), 'text/markdown', 'mixed')));
     out.push(mk('print', 'Print this chat or save as PDF', () => printHtml(chatToHtml(c))));
   }
   if (Install.event) out.push(mk('download', 'Install Lumen as an app', () => Install.run()));
@@ -10144,6 +10331,14 @@ window.addEventListener('appinstalled', () => { Install.event = null; toast('Lum
 
 /* ---------- settings ---------- */
 let settingsModelsEl = null, learnUnsub = null, packUnsub = null;
+/* Settings: the effort levels in a list (seven levels and Auto are too many for buttons in a row). */
+function effortSelect() {
+  const sel = h('select', { id: 'effortSel', 'aria-label': 'Effort' }, ...modesFor().map(m => h('option', { value: m.key, text: m.auto ? 'Auto (picks for each question)' : `${m.level}. ${m.label}` })));
+  sel.value = modeKeyOf(S.mode);
+  const why = h('p', { class: 'hint', text: modeOf(S.mode).desc });
+  sel.addEventListener('change', () => { S.mode = sel.value; saveSettings(); renderPills(); why.textContent = modeOf(S.mode).desc; });
+  return h('div', { class: 'effort-set' }, sel, why);
+}
 function seg(name, options, value, onChange) {
   const wrap = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': name });
   for (const [v, label] of options) {
@@ -10175,7 +10370,7 @@ function applyMemorySize() {
 function renderSettingsModels() {
   if (!settingsModelsEl) return;
   settingsModelsEl.replaceChildren();
-  for (const m of MODELS) {
+  for (const m of [...MODELS].sort((x, y) => x.downloadMB - y.downloadMB)) {
     const saved = Brain.cached[m.key];
     const isLoaded = Brain.loadedKey === m.key && Brain.state === 'ready';
     const radio = h('input', { type: 'radio', name: 'model', value: m.key, id: 'model-' + m.key });
@@ -10191,7 +10386,7 @@ function renderSettingsModels() {
     }));
     const f = Setup.fit()[m.key];
     settingsModelsEl.append(h('label', { class: 'model-opt', for: 'model-' + m.key }, radio,
-      h('div', { class: 'nm' }, m.name, h('span', { class: 'tag ' + m.tagClass, text: m.tag }), f === 'best' ? h('span', { class: 'tag fit', text: 'Best for this computer' }) : f === 'big' ? h('span', { class: 'tag plain', text: 'May be too big here' }) : null),
+      h('div', { class: 'nm' }, m.name, h('span', { class: 'base', text: m.base }), h('span', { class: 'tag ' + m.tagClass, text: m.tag }), f === 'best' ? h('span', { class: 'tag fit', text: 'Best for this computer' }) : f === 'big' ? h('span', { class: 'tag plain', text: 'May be too big here' }) : null),
       h('div', { class: 'desc', text: m.desc }), facts, act.childElementCount ? act : null));
   }
 }
@@ -10311,8 +10506,8 @@ function openSettings(focus) {
     h('div', { class: 'row' }, h('button', { class: 'btn', type: 'button', html: `${icon('layers', 15)}<span>Open the Test lab</span>`, onclick: () => { els.settings.close(); openLab(); } }))));
 
   // Hard questions: voting
-  b.append(sec('vote', 'Three tries for hard questions', hint('In Deep mode, short puzzles and math questions are answered three times. Lumen shows the answer most tries agree on.'), more('If all three differ, Lumen says it is not sure. It makes these answers 2 to 3 times slower and is never used for essays or opinions. Turn it on only if the Test lab shows it helps. You can also use it once with /vote.'),
-    h('div', { class: 'lrn-switch' }, h('div', { class: 'lt' }, h('b', { text: 'Vote on hard questions' }), h('span', { text: 'Only in Deep mode, only for short checkable answers.' })),
+  b.append(sec('vote', 'Three tries for hard questions', hint('At Max effort, short puzzles and math questions are answered three times (five times at Ultra). Lumen shows the answer most tries agree on.'), more('If all three differ, Lumen says it is not sure. It makes these answers 2 to 3 times slower and is never used for essays or opinions. Turn it on only if the Test lab shows it helps. You can also use it once with /vote.'),
+    h('div', { class: 'lrn-switch' }, h('div', { class: 'lt' }, h('b', { text: 'Vote on hard questions' }), h('span', { text: 'Only at Max and Ultra effort, only for short checkable answers.' })),
       toggle('Vote on hard questions', S.vote.on, v => { S.vote.on = v; saveSettings(); }))));
 
   // About you
@@ -10376,7 +10571,7 @@ function openSettings(focus) {
   // Answers and look-ups
   const row = (label, desc, control) => h('div', { class: 'set-row' }, h('div', { class: 'lt' }, h('b', { text: label }), desc ? h('span', { text: desc }) : null), control);
   b.append(sec('answers', 'Answers',
-    row('Thinking', 'How much Lumen thinks before it answers.', seg('Thinking', modesFor().map(m => [m.key, m.label]), S.mode, v => { S.mode = v; saveSettings(); renderPills(); })),
+    row('Effort', 'How hard Lumen works on an answer: from Instant (the fastest) to Ultra (the most careful). Auto picks it for each question.', effortSelect()),
     row('Style', 'How answers are written.', seg('Answer style', Object.entries(STYLES).map(([k, v]) => [k, v.label]), S.style, v => { S.style = v; saveSettings(); renderPills(); })),
     row('Creativity', 'Precise is best for math and facts.', seg('Creativity', [['precise', 'Precise'], ['balanced', 'Balanced'], ['creative', 'Creative']], S.creativity, v => { S.creativity = v; saveSettings(); })),
     row('Check answers against sources', 'When an answer has a date, number or name that no source contains, Lumen writes it again once without it. It takes a little longer, only when needed.',
@@ -10692,11 +10887,13 @@ function usageSection() {
       tile('Screen time', t.t ? fmtDur(t.t) : '0 min', t.days > 1 ? `${fmtDur(t.t / t.days)} on an active day` : t.t ? 'With Lumen open and in use' : 'None yet', 'uTime'),
       tile('Speed', t.tps ? t.tps.toFixed(1) : '—', t.tps ? 'tokens per second' : 'Shown after your first answer', 'uSpeed'));
     foot.textContent = `Counted on this computer since ${usageDate(new Date(Usage.since()))}${Usage.streak() > 1 ? ` · ${Usage.streak()} days in a row` : ''}. Nothing is sent anywhere.`;
-    // by model and by thinking mode
+    // by model and by effort
     const mrows = Object.entries(t.models).map(([k, v]) => [MODELS.find(m => m.key === k)?.name || k, v.i + v.o, `${fmtNum(v.i)} read · ${fmtNum(v.o)} written`]).sort((a, b) => b[1] - a[1]);
     const mtotal = mrows.reduce((n, r) => n + r[1], 0);
     modelBox.replaceChildren(...(mrows.length ? mrows.map(r => meter(r[0], r[1], mtotal, usageLabel(r[1], 'token', 'tokens'), r[2])) : [h('p', { class: 'hint', text: 'Nothing yet. Ask Lumen a question and the numbers appear here.' })]));
-    const drows = Object.entries(t.modes).map(([k, v]) => [MODES[k]?.label || k, v]).sort((a, b) => b[1] - a[1]);
+    const dmap = new Map();   // older answers were counted under the old names (Fast, Think, Deep): they join their new level
+    for (const [k, v] of Object.entries(t.modes)) { const l = (MODES[k] || MODES[MODE_ALIAS[k]])?.label || k; dmap.set(l, (dmap.get(l) || 0) + v); }
+    const drows = [...dmap].sort((a, b) => b[1] - a[1]);
     const dtotal = drows.reduce((n, r) => n + r[1], 0);
     modeBox.replaceChildren(...(drows.length ? drows.map(r => meter(r[0], r[1], dtotal, usageLabel(r[1], 'answer', 'answers'))) : [h('p', { class: 'hint', text: 'No answers yet in this time.' })]));
     if (t.l) modeBox.append(h('p', { class: 'hint', id: 'uLab', text: `${fmtNum(t.l)} of the tokens above were used by the Test lab.` }));
@@ -10781,7 +10978,7 @@ function usageSection() {
       h('details', { class: 'more' }, h('summary', { text: 'How does Lumen get better?' }), h('p', { class: 'hint', text: 'The AI model itself does not change inside a web page. What gets better is what Lumen gives it: saved notes from the daily reading, your corrections, answers you marked as good, and the source check that finds details no source contains. “Checked OK” counts answers where every date, number and name was found in the sources, after any fix Lumen made.' })),
       h('h4', { text: 'What Lumen has learned so far' }), qLearn, h('div', { class: 'opt-row' }, h('button', { class: 'btn', type: 'button', text: 'See what Lumen has learned', onclick: () => Learn.showLearned() }))),
     sec('usagechart', 'Last 14 days', h('div', { class: 'u-top' }, metricSeg, tableBtn), chartBox),
-    sec('usagemodels', 'Where the tokens went', h('h4', { text: 'By model' }), modelBox, h('h4', { text: 'By thinking mode' }), modeBox),
+    sec('usagemodels', 'Where the tokens went', h('h4', { text: 'By model' }), modelBox, h('h4', { text: 'By effort' }), modeBox),
     sec('usagecare', 'This visit and care', visitBox, h('hr', { class: 'thin' }), careBox, nudge,
       h('div', { class: 'opt-row' },
         h('button', { class: 'btn', type: 'button', id: 'uCopy', html: `${icon('copy', 15)}<span>Copy summary</span>`, onclick: () => { copyText(summary()); toast('Summary copied.'); } }),
@@ -10827,7 +11024,7 @@ function chatToHtml(c) {
   const body = c.messages.map(m => m.role === 'user'
     ? `<div class="u"><b>You</b><p>${esc(m.content).replace(/\n/g, '<br>')}</p></div>`
     : `<div class="a"><b>Lumen</b><div class="md">${renderMarkdown(m.content || '')}</div>${m.widget ? `<div class="md">${renderMarkdown(widgetToMarkdown(m.widget))}</div>` : ''}${m.sources?.length ? `<ol class="src">${m.sources.map(s => `<li>${esc(s.title)} <i>${esc(s.site || 'Wikipedia')}</i> ${esc(s.url || '')}</li>`).join('')}</ol>` : ''}</div>`).join('');
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="generator" content="Lumen (AI-generated content)"><title>${esc(c.title)}</title>${body.includes('class="katex"') ? `<link rel="stylesheet" href="${esc(new URL('vendor/katex-0.18.9/katex.min.css', location.href).href)}">` : ''}
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="generator" content="Lumen (AI-generated content)"><meta name="ai-generated" content="partly: the answers marked Lumen"><meta name="digital-source-type" content="${IPTC_MIXED}"><title>${esc(c.title)}</title>${body.includes('class="katex"') ? `<link rel="stylesheet" href="${esc(new URL('vendor/katex-0.18.9/katex.min.css', location.href).href)}">` : ''}
 <style>body{font:14px/1.6 Georgia,serif;color:#222;max-width:760px;margin:24px auto;padding:0 18px}h1{font:600 22px/1.3 system-ui,sans-serif}.u{margin:18px 0 6px;padding:8px 12px;background:#f3f1ea;border-radius:10px}.u b,.a>b{font:600 12px system-ui,sans-serif;color:#666;text-transform:none}.u p{margin:4px 0 0}.a{margin:6px 0 20px}
 .md p{margin:.4em 0}.md pre{background:#f6f4ee;padding:8px;border-radius:8px;white-space:pre-wrap;word-break:break-word}.md table{border-collapse:collapse}.md td,.md th{border:1px solid #ccc;padding:4px 8px}.src{font:11.5px/1.5 system-ui,sans-serif;color:#555}.cb-head,.cb-acts{display:none}.ai{font:12px system-ui,sans-serif;color:#777;margin-top:24px}
 @media print{body{margin:0;max-width:none}.u,.a{break-inside:avoid-page}}</style></head><body><h1>${esc(c.title)}</h1>${body}<p class="ai">${AI_LABEL}. It can be wrong.</p></body></html>`;
@@ -11133,18 +11330,21 @@ const QuoteBtn = (() => {
   document.body.append(btn);
   let text = '';
   const hide = () => { btn.hidden = true; text = ''; };
-  document.addEventListener('selectionchange', () => {
+  // shown above the selected words; when the chat scrolls (also the gentle scroll after an answer ends) it moves with them
+  const place = () => {
     const sel = document.getSelection();
     if (!sel || sel.isCollapsed || !sel.rangeCount) return hide();
     const node = sel.anchorNode?.nodeType === 1 ? sel.anchorNode : sel.anchorNode?.parentElement;
     if (!node?.closest?.('.msg-ai .md') || App.run) return hide();
     text = sel.toString().trim();
     if (text.length < 3) return hide();
-    const r = sel.getRangeAt(0).getBoundingClientRect();
+    const r = sel.getRangeAt(0).getBoundingClientRect(), view = els.thread.getBoundingClientRect();
+    if (r.bottom < view.top || r.top > view.bottom) return hide();   // scrolled out of sight
     btn.hidden = false;
     btn.style.top = Math.max(8, r.top - 40) + 'px';
     btn.style.left = Math.min(window.innerWidth - 160, Math.max(8, r.left + r.width / 2 - 70)) + 'px';
-  });
+  };
+  document.addEventListener('selectionchange', place);
   btn.addEventListener('pointerdown', e => e.preventDefault());
   btn.addEventListener('click', () => {
     if (!text) return;
@@ -11153,7 +11353,7 @@ const QuoteBtn = (() => {
     autoGrow(); updateComposer(); els.input.focus(); els.input.setSelectionRange(els.input.value.length, els.input.value.length);
     document.getSelection()?.removeAllRanges(); hide();
   });
-  els.thread.addEventListener('scroll', hide, { passive: true });
+  els.thread.addEventListener('scroll', () => { if (!btn.hidden) place(); }, { passive: true });
   return { hide };
 })();
 
@@ -11327,7 +11527,7 @@ const Setup = (() => {
       title = 'How should Lumen answer?'; sub = 'You can change this at any time with the buttons in the message box.';
       const styles = [['normal', 'Normal', 'Clear answers that fit the question'], ['simple', 'Simple', 'Everyday words, like explaining to a 12-year-old'], ['short', 'Short', 'A few sentences, straight to the point'], ['tutor', 'Step by step', 'Teaches and checks that you understood'], ['explain', 'Explanatory', 'Thorough, with the reasons and background']];
       body.push(h('div', { class: 'su-grid two', role: 'radiogroup', 'aria-label': 'Style' }, ...styles.map(([v, l, d]) => card(st.style === v, 'text', l, d, () => { st.style = v; paint(); }))));
-      body.push(h('h4', { class: 'su-h4', text: 'Thinking' }), h('div', { class: 'su-row', role: 'radiogroup', 'aria-label': 'Thinking' }, ...[['fast', 'Quick answers'], ['auto', 'Balanced (Auto)'], ['deep', 'Most careful']].map(([v, l]) => h('button', { type: 'button', class: 'su-pill' + (st.mode === v ? ' on' : ''), role: 'radio', 'aria-checked': String(st.mode === v), text: l, onclick: () => { st.mode = v; paint(); } }))));
+      body.push(h('h4', { class: 'su-h4', text: 'Effort' }), h('div', { class: 'su-row', role: 'radiogroup', 'aria-label': 'Effort' }, ...[['low', 'Quick answers'], ['auto', 'Balanced (Auto)'], ['max', 'Most careful']].map(([v, l]) => h('button', { type: 'button', class: 'su-pill' + (st.mode === v ? ' on' : ''), role: 'radio', 'aria-checked': String(st.mode === v), text: l, onclick: () => { st.mode = v; paint(); } }))));
     } else if (step === 'privacy') {
       title = 'Look things up on the internet?'; sub = 'Small AI models forget facts, so Lumen can look them up in Wikipedia and other free sources. Only short search words are sent, never your chats.';
       body.push(h('div', { class: 'su-grid', role: 'radiogroup', 'aria-label': 'Look-ups' },
@@ -11336,11 +11536,11 @@ const Setup = (() => {
       body.push(h('h4', { class: 'su-h4', text: 'Look' }), h('div', { class: 'su-row', role: 'radiogroup', 'aria-label': 'Theme' }, ...[['system', 'Match the computer'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) => h('button', { type: 'button', class: 'su-pill' + (st.theme === v ? ' on' : ''), role: 'radio', 'aria-checked': String(st.theme === v), text: l, onclick: () => { st.theme = v; S.theme = v; applyTheme(); paint(); } }))));
     } else if (step === 'ready') {
       const m = Brain.model(st.model), saved = !!Brain.cached[m.key];
-      title = 'Your model'; sub = `For your ${dev ? dev.label : 'computer'}${st.ram ? ` with ${RAM.find(r => r[0] === st.ram)?.[1]} of memory` : ''}, Lumen recommends ${Brain.model(p.best).name}. You can pick another one here or later in the message box.`;
+      title = 'Your model'; sub = `For your ${dev ? dev.label : 'computer'}${st.ram ? ` with ${RAM.find(r => r[0] === st.ram)?.[1]} of memory` : ''}, Lumen recommends ${fullModelName(Brain.model(p.best))}. You can pick another one here or later in the message box.`;
       const list = h('div', { class: 'su-models', role: 'radiogroup', 'aria-label': 'AI model' });
       for (const mm of [...MODELS].sort((a, b) => a.downloadMB - b.downloadMB)) {
         const f = p.fit[mm.key];
-        list.append(card(st.model === mm.key, mm.power ? 'layers' : 'spark', mm.name, `${mm.desc.split('. ')[0]}.`, () => { st.model = mm.key; paint(); },
+        list.append(card(st.model === mm.key, mm.power ? 'layers' : 'spark', mm.name, `${mm.blurb} · ${mm.base}. ${mm.desc.split('. ')[0].replace(/^The everyday model: /, '').replace(/^./, c => c.toUpperCase())}.`, () => { st.model = mm.key; paint(); },
           h('span', { class: 'su-meta' }, h('span', { class: 'tag ' + (f === 'best' ? 'fit' : f === 'big' ? 'lamp' : 'plain'), text: f === 'best' ? 'Best fit' : f === 'big' ? 'May be too big' : 'Fits' }), h('span', { text: Brain.cached[mm.key] ? 'Saved here' : fmtMB(mm.downloadMB) }))));
       }
       body.push(list);
@@ -11368,7 +11568,7 @@ const Setup = (() => {
     if (st.name.trim()) S.name = st.name.trim().slice(0, 40);
     S.uses = st.uses.filter(u => USES.some(x => x[0] === u));
     if (STYLES[st.style]) S.style = st.style;
-    if (MODES[st.mode]) S.mode = st.mode;
+    if (MODES[st.mode]) S.mode = modeKeyOf(st.mode);
     S.wiki = WIKI_MODES[st.wiki] ? st.wiki : 'auto';
     if (S.wiki === 'off') { S.learn.daily = false; S.learn.dailyTopics = false; }
     S.theme = st.theme; applyTheme();
@@ -11422,7 +11622,7 @@ const Setup = (() => {
   else if (!narrow()) els.input.focus();
 })();
 try { window.hljs?.configure({ ignoreUnescapedHTML: true }); } catch {}
-window.__lumen = { WEBLLM_URL, ModelFiles, Setup, Projects, Artifact, docsOf, branchChat, artifactsOf, chooseModel, whenText, Guard, Bigger, Teach, Ground, Usage, LEGAL, Care, openLegal, labelCopy, showReadBox, WikiPack, Speech, Dictation, Lab, LabScore, LAB_QUESTIONS, LAB_PUZZLES, openLab, App, Brain, S, Calc, Net, Cache, splitStream, looping, trimRepeat, thinkTitle, renderMarkdown, shouldLookUp, keywordQuery, entityQuery, terms, cleanAnswer,
+window.__lumen = { WEBLLM_URL, MODES, LEVELS, modeOf, modeKeyOf, levelStep, EffortLearn, replayFor, reasoningIn, modelByName, ModelFiles, Setup, Projects, Artifact, docsOf, branchChat, artifactsOf, chooseModel, whenText, Guard, Bigger, Teach, Ground, Usage, LEGAL, Care, openLegal, labelCopy, showReadBox, WikiPack, Speech, Dictation, Lab, LabScore, LAB_QUESTIONS, LAB_PUZZLES, openLab, App, Brain, S, Calc, Net, Cache, splitStream, looping, trimRepeat, thinkTitle, renderMarkdown, shouldLookUp, keywordQuery, entityQuery, terms, cleanAnswer,
   localToolLines, timeNotes, unitNotes, fxIntent, weatherIntent, cryptoIntent, gather, selectDocText, chunkDoc, pickMode, pickPlaybook, planBudget, buildMessages, parseSlash, jsonFromText, STUDY_CHECK, readFileText, summarizeDocs, scheduleSummary, addMemory, Learn, Core, confidenceOf, Saver, Review, ROLES, setRole, getRole, solveParts, checkArithmetic, essayParagraphs, quoteInText, verifyComments, pickTop, runEssay, factCheck, claimsFrom, debateBalance, showFactCheck, chatToMarkdown, openSettings, submitText, send, wantDocs, plainText, slidesToHtml, chatToHtml, wikidataProps, webSearch, readPage, forkAt, switchFork, forkInfo, voteWorthy, finalAnswerOf, voteKey, voteTally, Examples, PROMPT_VERSIONS, basePrompt, EXAMPLES, systemPrompt, importBackup, Store, openChat, renderThread, saveChat, regenerate, resendEdited };
 </script>
 </body>
