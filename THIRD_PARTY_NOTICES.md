@@ -152,7 +152,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ## Fonts (SIL Open Font License 1.1)
 
-The two fonts built into the page (`index.html` contains them as small web-font files) are free fonts under the SIL Open Font License, Version 1.1. The licence texts, with the copyright lines, are in the folder `licenses/`.
+Since version 18 the page uses the fonts that are already on your computer and ships no font files. Earlier notes named these two free fonts (SIL Open Font License, Version 1.1); their licence texts, with the copyright lines, stay in the folder `licenses/` in case a later version bundles them.
 
 - **Figtree**: Copyright 2022 The Figtree Project Authors (https://github.com/erikdkennedy/figtree). Licence: `licenses/OFL-Figtree.txt`.
 - **Fraunces**: Copyright 2020 The Fraunces Project Authors (https://github.com/undercasetype/Fraunces). Licence: `licenses/OFL-Fraunces.txt`.

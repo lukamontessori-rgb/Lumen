@@ -1,0 +1,16 @@
+{
+  "name": "lumen",
+  "private": true,
+  "description": "Lumen: a private AI that runs inside your browser. This file is only for the tests; the site itself needs no build step.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "test": "node tests/run.mjs",
+    "shots": "node tests/shots.mjs",
+    "serve": "node tests/server.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.1",
+    "docx": "^9.5.0"
+  }
+}

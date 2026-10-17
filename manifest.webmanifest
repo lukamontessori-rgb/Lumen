@@ -1,12 +1,12 @@
 {
   "name": "Lumen",
   "short_name": "Lumen",
-  "description": "A private AI tutor that runs inside your browser.",
+  "description": "A private AI that runs inside your browser.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#FAF8F3",
-  "theme_color": "#2E6B66",
+  "background_color": "#FAF9F5",
+  "theme_color": "#FAF9F5",
   "icons": [
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },

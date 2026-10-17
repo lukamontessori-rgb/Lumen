@@ -5,10 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Lumen</title>
 <meta name="description" content="A private AI tutor that runs inside your browser.">
-<meta name="theme-color" content="#FAF8F3" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#1E1D1A" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#FAF9F5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#262624" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%232E6B66'/%3E%3Ccircle cx='15' cy='17' r='7.5' fill='none' stroke='white' stroke-width='2.4'/%3E%3Ccircle cx='21.5' cy='10.5' r='3' fill='%23E0A558'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23C96442'/%3E%3Ccircle cx='14.6' cy='17.4' r='7.4' fill='none' stroke='white' stroke-width='2.6'/%3E%3Ccircle cx='22.6' cy='9.4' r='3.2' fill='%23FAF9F5'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="vendor/katex-0.18.9/katex.min.css">
 <style>
 /* Layout, in the style of Claude: a warm, quiet sidebar on the left (new chat, projects, starred and recent chats, your profile at the bottom),
@@ -5946,7 +5947,7 @@ function showFactCheck(chat, m, { rerun = false } = {}) {
   });
   if (m.factCheck && !rerun) { show(m.factCheck); return; }
   if (App.run) { toast('Wait until the answer is finished.'); return; }
-  if (Brain.state !== 'ready') { toast('Load the AI model first (use the status chip at the top).'); return; }
+  if (Brain.state !== 'ready') { toast('Start the AI model first (the model button in the message box).'); return; }
   const ctl = new AbortController();
   const prog = h('p', { class: 'hint', text: 'Starting…' });
   openViewer('Fact check', () => h('div', { class: 'factcheck' }, prog, h('div', { class: 'opt-row' }, h('button', { class: 'btn', type: 'button', text: 'Stop', onclick: () => { ctl.abort(); Brain.interrupt(); els.viewer.close(); } }))));
@@ -8607,7 +8608,7 @@ function openLab() {
     const r = runs[0], base = r && Lab.baselineFor(r), cmp = r && Lab.compare(r, base);
     const kids = [p('Runs a fixed set of questions on the model that is loaded now and compares the answers with the baseline you saved. A quick check (15 questions) takes about 5 minutes, the full test (50) about 15. Run it after you change something, to see that nothing got worse.'),
       h('div', { class: 'row' }, btn('Run quick check', () => Lab.runCheck('quick'), { primary: true, disabled: busy() || !ready() }), btn('Run full test (50)', () => Lab.runCheck('full'), { disabled: busy() || !ready() }), btn('Check it is stable (runs twice)', () => Lab.runStability('quick'), { disabled: busy() || !ready() }))];
-    if (!ready()) kids.push(p('Load the AI model first (the status chip at the top right).', 'hint warn'));
+    if (!ready()) kids.push(p('Start the AI model first (the model button in the message box).', 'hint warn'));
     if (r) {
       const [l1, l2] = Lab.twoLines(r, base);
       kids.push(h('div', { class: 'lab-result' + (cmp && !cmp.pass ? ' bad' : cmp ? ' good' : '') }, h('b', { text: l1 }), h('span', { text: l2 }),
@@ -9992,7 +9993,7 @@ const LEGAL_PAGES = {
     lh('Wikipedia'),
     lp('Text from ', ext('https://en.wikipedia.org', 'Wikipedia'), ' (and Simple English Wikipedia, Wiktionary and Wikivoyage) is written by Wikipedia contributors and shared under the ', ext('https://creativecommons.org/licenses/by-sa/4.0/', 'Creative Commons Attribution-ShareAlike 4.0 licence'), ' (CC BY-SA 4.0). Lumen shows the article it used under each answer. If you add an offline Wikipedia copy, its text is shortened and has no pictures. Wikipedia® is a trademark of the Wikimedia Foundation. Lumen is not connected to or endorsed by the Wikimedia Foundation.'),
     lh('Software'),
-    lp(ext('https://github.com/mlc-ai/web-llm', 'WebLLM'), ' by MLC (Apache 2.0) · ', ext('https://github.com/markedjs/marked', 'marked'), ' (MIT) · ', ext('https://github.com/cure53/DOMPurify', 'DOMPurify'), ' (Apache 2.0 or MPL 2.0) · ', ext('https://katex.org', 'KaTeX'), ' (MIT) · ', ext('https://highlightjs.org', 'highlight.js'), ' (BSD-3-Clause) · ', ext('https://mermaid.js.org', 'Mermaid'), ' (MIT) · ', ext('https://mozilla.github.io/pdf.js/', 'PDF.js'), ' (Apache 2.0). Fonts: ', ext('https://github.com/erikdkennedy/figtree', 'Figtree'), ' and ', ext('https://github.com/undercasetype/Fraunces', 'Fraunces'), ' (SIL Open Font License 1.1). Full notices are in the file THIRD_PARTY_NOTICES.md.'),
+    lp(ext('https://github.com/mlc-ai/web-llm', 'WebLLM'), ' by MLC (Apache 2.0) · ', ext('https://github.com/markedjs/marked', 'marked'), ' (MIT) · ', ext('https://github.com/cure53/DOMPurify', 'DOMPurify'), ' (Apache 2.0 or MPL 2.0) · ', ext('https://katex.org', 'KaTeX'), ' (MIT) · ', ext('https://highlightjs.org', 'highlight.js'), ' (BSD-3-Clause) · ', ext('https://mermaid.js.org', 'Mermaid'), ' (MIT) · ', ext('https://mozilla.github.io/pdf.js/', 'PDF.js'), ' (Apache 2.0). Lumen uses the fonts already on your computer and ships none. Full notices are in the file THIRD_PARTY_NOTICES.md.'),
     lh('Data'),
     lp('Wikidata and OpenAlex (CC0) · ', ext('https://open-meteo.com', 'Open-Meteo.com'), ' weather data (CC BY 4.0) · exchange rates from the European Central Bank through Frankfurter · prices from CoinGecko · headlines from GDELT and Hacker News · page reading by Jina Reader. The built-in facts were written for Lumen from many public sources.'),
     lh('Lumen'),
