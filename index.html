@@ -1298,6 +1298,11 @@ S.keepAwake = S.keepAwake !== false;   // keep the screen awake while the AI wor
 S.strongPc = S.strongPc === true;      // the person confirmed that this computer can run the 9B model
 if (!S.loaded || typeof S.loaded !== 'object' || Array.isArray(S.loaded)) S.loaded = {};   // models that loaded at least once here
 if (!Array.isArray(S.crashes)) S.crashes = [];
+/* Models whose files this browser damaged in the Cache API are kept in OPFS instead (see ModelFiles), and a short log of repairs stops endless re-downloads. */
+if (!S.store || typeof S.store !== 'object' || Array.isArray(S.store)) S.store = {};
+for (const k of Object.keys(S.store)) if (S.store[k] !== 'opfs' || !MODELS.some(m => m.key === k)) delete S.store[k];
+S.repairs = (Array.isArray(S.repairs) ? S.repairs : []).filter(r => r && typeof r.key === 'string' && Number.isFinite(r.t)).slice(-12);
+if (typeof S.noAuto !== 'string' || !MODELS.some(m => m.key === S.noAuto)) delete S.noAuto;   // a model that stopped the page while loading is not started by itself
 if (!['jina', 'tavily'].includes(S.webProvider)) S.webProvider = 'jina';
 if (!Array.isArray(S.memory)) S.memory = [];
 S.memory = S.memory.filter(m => m && typeof m.text === 'string').slice(0, MEM_MAX);
@@ -1771,13 +1776,15 @@ const Brain = {
     }
     return this.lib;
   },
-  appConfig(lib) { return { ...lib.prebuiltAppConfig, cacheBackend: this.backend }; },
+  /* Where a model's files are kept: the Cache API, unless this browser gave back damaged copies of them (then OPFS, see ModelFiles). */
+  backendFor(key) { return S.store?.[key] === 'opfs' && ModelFiles.opfsOk() && this.backend === 'cache' ? 'opfs' : this.backend; },
+  appConfig(lib, key = S.model) { return { ...lib.prebuiltAppConfig, cacheBackend: this.backendFor(key) }; },
 
   async refreshCached() {
     try {
       const lib = await this.getLib();
       await Promise.all(MODELS.map(async m => {
-        try { this.cached[m.key] = await lib.hasModelInCache(this.modelId(m.key), this.appConfig(lib)); } catch { this.cached[m.key] = false; }
+        try { this.cached[m.key] = await lib.hasModelInCache(this.modelId(m.key), this.appConfig(lib, m.key)); } catch { this.cached[m.key] = false; }
       }));
     } catch {}
     this.emit();
@@ -1785,13 +1792,14 @@ const Brain = {
   },
 
   onProgress(r, wasCached) {
-    this.progress = Math.max(this.progress, Math.min(1, r.progress || 0));
-    const t = r.text || '';
+    const t = r.text || '', was = this.phase;
     if (/fetching param cache/i.test(t)) this.phase = 'Downloading';
     else if (/loading model from cache/i.test(t)) this.phase = 'Loading from this browser';
     else if (/shader|loading gpu|compil/i.test(t)) this.phase = 'Preparing your graphics chip';
     else if (/finish/i.test(t)) this.phase = 'Almost ready';
-    else if (!this.phase) this.phase = wasCached ? 'Loading from this browser' : 'Downloading';
+    else if (!this.phase || /^(Checking|Downloading$)/.test(this.phase) && !/fetch/i.test(t)) this.phase = wasCached ? 'Loading from this browser' : 'Downloading';
+    if (was !== this.phase && was === 'Downloading') { this.progress = 0; this.speed = 0; }   // the bar starts again for the next step
+    this.progress = Math.max(this.progress, Math.min(1, r.progress || 0));
     const mb = t.match(/(\d+(?:\.\d+)?)\s*MB\s*(?:fetched|loaded)/i);
     if (mb) this.mb = parseFloat(mb[1]);
     this.elapsed = r.timeElapsed || this.elapsed;
@@ -1858,21 +1866,63 @@ const Brain = {
     return this.loadPromise;
   },
 
+  /* Download what is missing (or, with deep, also what is broken) with Lumen's own downloader (see ModelFiles).
+     A browser that gives back damaged copies from the Cache API is switched to OPFS for this model. Returns null when this kind of storage is not supported. */
+  async fetchFiles(lib, key, token, deep = false) {
+    const m = this.model(key), id = this.modelId(key), t0 = performance.now();
+    const opts = {
+      deep, signal: this.dlCtl?.signal,
+      onStep: s => { if (token !== this.loadToken) return; this.phase = s; this.lastEvent = Date.now(); this.emit(); },
+      onProgress: ({ done, total, speed }) => {
+        if (token !== this.loadToken) return;
+        this.lastEvent = Date.now(); this.events++; this.retrying = 0;
+        this.phase = 'Downloading'; this.progress = total ? Math.min(1, done / total) : 0; this.mb = done / 1e6; this.totalMB = total / 1e6; this.speed = speed / 1e6;
+        this.elapsed = (performance.now() - t0) / 1000; this.emit();
+      },
+      onRetry: i => { if (token !== this.loadToken) return; this.retrying = i; this.emit(); },
+    };
+    try { return await ModelFiles.ensure(lib, id, this.backendFor(key), opts); }
+    catch (e) {
+      if (!e?.storage || this.backendFor(key) !== 'cache' || !ModelFiles.opfsOk()) throw e;
+      console.warn('This browser gave back damaged copies of saved files; saving the model another way (OPFS).', e);
+      for (const mid of Object.values(m.ids)) { try { await ModelFiles.forget(lib, mid, 'cache'); await lib.deleteModelAllInfoInCache(mid, { ...lib.prebuiltAppConfig, cacheBackend: 'cache' }); } catch {} }
+      S.store = { ...(S.store || {}), [key]: 'opfs' }; saveSettings();
+      this.storeSwitched = true; this.phase = 'Saving the files another way'; this.emit();
+      return ModelFiles.ensure(lib, id, 'opfs', opts);
+    }
+  },
+  /* Stop a download that is running (the finished files are kept, so Download carries on from there). */
+  cancelLoad() {
+    if (this.state !== 'loading') return;
+    this.loadToken++; try { this.dlCtl?.abort(); } catch {}
+    this.teardown().catch(() => {});
+    this.state = 'idle'; this.phase = ''; this.progress = 0; this.loadingKey = null; this.emit();
+    this.refreshCached();
+  },
+
   async _load(key) {
     const m = this.model(key);
     const id = this.modelId(key);
-    this.state = 'loading'; this.loadingKey = key; this.phase = ''; this.progress = 0; this.mb = 0; this.elapsed = 0; this.error = '';
+    this.state = 'loading'; this.loadingKey = key; this.phase = ''; this.progress = 0; this.mb = 0; this.totalMB = 0; this.speed = 0; this.elapsed = 0; this.error = ''; this.retrying = 0; this.storeSwitched = false; this.netFail = false;
     this.stalled = false; this.stuck = false; this.lastEvent = Date.now(); this.events = 0;
     const token = ++this.loadToken;
+    try { this.dlCtl?.abort(); } catch {}
+    this.dlCtl = new AbortController();
     const tLoad0 = performance.now();
     this.emit();
     Guard.enter('loading');
     try {
       const lib = await this.getLib();
       let wasCached = false;
-      try { wasCached = await lib.hasModelInCache(id, this.appConfig(lib)); } catch {}
+      try { wasCached = await lib.hasModelInCache(id, this.appConfig(lib, key)); } catch {}
+      // Not saved yet (or only partly): Lumen's own downloader fetches the missing files first, with checks and retries.
+      if (!wasCached) {
+        const got = await this.fetchFiles(lib, key, token);
+        if (token !== this.loadToken) throw new Error('cancelled');
+        if (got) { wasCached = true; this.cached[key] = true; }
+      }
       this.wasCached = wasCached;
-      this.phase = wasCached ? 'Loading from this browser' : 'Downloading';
+      this.phase = wasCached ? 'Loading from this browser' : 'Downloading'; this.progress = 0;
       this.otherTabs().then(v => { if (token === this.loadToken && v !== this.otherTab) { this.otherTab = v; this.emit(); } });
       this.emit();
       const onProgress = r => { this.lastEvent = Date.now(); this.events++; if (this.stalled) { this.stalled = false; } this.onProgress(r, wasCached); };
@@ -1902,22 +1952,46 @@ const Brain = {
       // Ask for the memory size from Settings. If the graphics chip cannot hold it, step down to a smaller one.
       const target = ctxTarget(m);
       const ladder = [...new Set([target, 16384, 8192, 4096].filter(c => c <= target))];
-      let lastErr = null, restarts = 0, repairs = 0;
+      let lastErr = null, restarts = 0, repairs = 0, netTries = 0;
       for (let i = 0; i < ladder.length; i++) {
         const ctx = ladder[i];
         try { await guarded(ctx); lastErr = null; break; }
         catch (e) {
-          /* A saved model file that is empty or cut short (for example a download that was interrupted) cannot be read.
-             Delete the saved copy of this model and download it again, once, by itself. */
-          if (BROKEN_FILES_RE.test(String(e?.message || e)) && repairs++ < 1 && token === this.loadToken) {
-            console.warn('A saved model file is broken; deleting it and downloading it again.', e);
+          /* A saved model file that is empty or cut short cannot be read. Lumen checks every saved file and downloads only the
+             broken ones again (see ModelFiles). If every file checks out but the engine still read a broken one, this browser
+             hands back damaged copies, so the model is saved the other way (OPFS). At most twice per start, and at most
+             4 times a day per model, so a computer can never be stuck downloading the same model over and over. */
+          if (BROKEN_FILES_RE.test(String(e?.message || e)) && repairs++ < 2 && token === this.loadToken) {
+            const log = (Array.isArray(S.repairs) ? S.repairs : []).filter(r => r && r.key === key && Date.now() - r.t < 864e5);
+            if (log.length >= 4) throw Object.assign(e, { tooMany: true });
+            S.repairs = [...(S.repairs || []).filter(r => r && Date.now() - r.t < 864e5).slice(-11), { key, t: Date.now() }]; saveSettings();
+            console.warn('A saved model file is broken; checking the files and downloading only the broken ones again.', e);
             await this.teardown(); this.progress = 0;
-            for (const mid of Object.values(m.ids)) { try { await lib.deleteModelAllInfoInCache(mid, this.appConfig(lib)); } catch {} }
-            this.cached[key] = false; wasCached = false; this.wasCached = false;
-            this.phase = 'A saved file was broken. Downloading it again'; this.emit();
+            this.phase = 'Checking the saved files'; this.emit();
+            if (!ModelFiles.supports(this.backendFor(key))) {   // a browser without the Cache API: the old way, delete it all and let WebLLM download it
+              for (const mid of Object.values(m.ids)) { try { await lib.deleteModelAllInfoInCache(mid, this.appConfig(lib, key)); } catch {} }
+              this.cached[key] = false; wasCached = false; this.wasCached = false;
+            } else {
+              const r = await this.fetchFiles(lib, key, token, true);
+              if (token !== this.loadToken) throw new Error('cancelled');
+              if (r && !r.fixed && !r.downloaded) {
+                if (this.backendFor(key) !== 'cache' || !ModelFiles.opfsOk()) throw e;
+                // every file has the right size here, yet the engine read a broken one: this browser hands back damaged copies, so save this model the other way
+                for (const mid of Object.values(m.ids)) { try { await ModelFiles.forget(lib, mid, 'cache'); await lib.deleteModelAllInfoInCache(mid, { ...lib.prebuiltAppConfig, cacheBackend: 'cache' }); } catch {} }
+                S.store = { ...(S.store || {}), [key]: 'opfs' }; saveSettings(); this.storeSwitched = true;
+                this.phase = 'Saving the files another way'; this.emit();
+                await this.fetchFiles(lib, key, token, true);
+                if (token !== this.loadToken) throw new Error('cancelled');
+              }
+            }
+            this.phase = 'Loading from this browser'; this.progress = 0; this.emit();
             i--; continue;
           }
           if (BROKEN_FILES_RE.test(String(e?.message || e))) throw e;   // a smaller memory size cannot fix a broken file
+          // a small file the engine fetches itself (tokenizer, model library) failed on the network: try once more
+          if (isNetworkError(e) && netTries++ < 1 && navigator.onLine !== false && token === this.loadToken) {
+            await this.teardown(); await new Promise(r => setTimeout(r, 3000)); i--; continue;
+          }
           if (e?.stalled) {
             await this.teardown(); this.progress = 0;
             if (wasCached && restarts++ < 1 && token === this.loadToken) { console.warn('Loading did not start; restarting it once.'); this.phase = 'Restarting'; this.stalled = false; this.emit(); i--; continue; }
@@ -1934,16 +2008,20 @@ const Brain = {
       if (lastErr) throw lastErr;
       this.ctxWanted = target;
       this.loadedKey = key; this.state = 'ready'; this.stalled = false; this.cached[key] = true; this.loadSec = Math.round((performance.now() - tLoad0) / 100) / 10;
+      if (this.storeSwitched) toast('This browser was damaging the saved model files, so Lumen now saves them another way (in the site’s private file storage). It works as before.', null, 9000);
       try { await navigator.storage?.persist?.(); } catch {}
       if (!S.loaded[key]) { S.loaded[key] = true; saveSettings(); }   // so a later missing download can be explained
+      if (S.noAuto === key) { delete S.noAuto; saveSettings(); }      // it loaded fine, so it may start by itself again
       this.emit();
       // Warm up the graphics chip so the first real answer starts faster.
       this.generate({ messages: [{ role: 'user', content: 'Hi' }], think: false, max_tokens: 1, temperature: 0.7, top_p: 0.8, presence_penalty: 0 }).catch(() => {});
     } catch (e) {
       if (e?.message === 'cancelled' && token !== this.loadToken) throw e;   // a newer load has started; leave it alone
+      if (e?.message === 'stopped' && token !== this.loadToken) throw e;   // the download was cancelled
       console.error(e);
       await this.teardown();
       this.state = 'error'; this.stalled = false;
+      this.netFail = isNetworkError(e) && !e?.stalled;
       this.error = e?.stalled ? await this.explainStall(await this.getLib().catch(() => ({})), id) : friendlyError(e);
       this.stuck = !!e?.stalled;
       this.emit();
@@ -2012,10 +2090,18 @@ const Brain = {
 
   async remove(key) {
     const lib = await this.getLib();
-    if (this.loadedKey === key || this.loadingKey === key) { await this.teardown(); this.state = 'idle'; }
+    if (this.loadingKey === key) { this.loadToken++; try { this.dlCtl?.abort(); } catch {} }
+    if (this.loadedKey === key || this.loadingKey === key) { await this.teardown(); this.state = 'idle'; this.loadingKey = null; }
     for (const id of Object.values(this.model(key).ids)) {
-      try { await lib.deleteModelAllInfoInCache(id, this.appConfig(lib)); } catch {}
+      for (const backend of new Set([this.backend, 'cache', 'opfs'])) {
+        if (!ModelFiles.supports(backend)) continue;
+        try { await lib.deleteModelAllInfoInCache(id, { ...lib.prebuiltAppConfig, cacheBackend: backend }); } catch {}
+        try { await ModelFiles.forget(lib, id, backend); } catch {}
+      }
+      if (!ModelFiles.supports(this.backend)) { try { await lib.deleteModelAllInfoInCache(id, this.appConfig(lib, key)); } catch {} }
     }
+    if (S.store?.[key]) { delete S.store[key]; saveSettings(); }
+    S.repairs = (S.repairs || []).filter(r => r?.key !== key); delete S.loaded[key]; saveSettings();
     this.cached[key] = false;
     this.emit();
   },
@@ -2031,15 +2117,285 @@ async function pickCacheBackend() {
   return null;
 }
 
-function isNetworkError(e) { return /failed to fetch|networkerror|network error|load failed|err_internet|offline/i.test(String(e?.message || e)); }
+/* ---------- model files: Lumen downloads and checks the model files itself ----------
+   WebLLM can download a model by itself, but it trusts whatever the browser saved. A file that was saved empty or cut short
+   (a very big download, a full disk, a computer that went to sleep) made loading fail with "exceeds shard size 0", and the
+   only cure was to delete all of the model and download it again, which could fail the same way, over and over.
+   Now Lumen:
+   - checks the free space for this site before it starts, and asks the browser to keep the files;
+   - downloads the files itself, 4 at a time, each with up to 6 tries; files over 48 MB come in 32 MB pieces, so a broken
+     connection only costs the piece that was cut; a file must have exactly the size the model's index (tensor-cache.json) says;
+   - reads every file back after saving it; a browser that gives back a different size gets the other way of saving (OPFS);
+   - after a "broken file" error, checks the saved files and downloads only the broken ones again, never the whole model.
+   It writes into the same browser storage WebLLM reads ("webllm/config", "webllm/model", "webllm/wasm", in the Cache API or in
+   OPFS with WebLLM's own file names), so WebLLM then only loads. Only the model's own files are fetched, from Hugging Face and
+   GitHub, as before. */
+const ModelFiles = (() => {
+  const T = { piece: 32 * 1048576, big: 48 * 1048576, parallel: 4, tries: 6, backoff: 2000, idle: 60e3 };
+  const sleep = (ms, signal) => new Promise((res, rej) => {
+    const t = setTimeout(done, ms);
+    function done() { signal?.removeEventListener('abort', stop); res(); }
+    function stop() { clearTimeout(t); rej(new Error('stopped')); }
+    signal?.addEventListener('abort', stop, { once: true });
+  });
+  const waitOnline = signal => navigator.onLine !== false ? Promise.resolve() : new Promise((res, rej) => {
+    const on = () => { window.removeEventListener('online', on); res(); };
+    window.addEventListener('online', on);
+    signal?.addEventListener('abort', () => { window.removeEventListener('online', on); rej(new Error('stopped')); }, { once: true });
+  });
+  const tag = (msg, props) => Object.assign(new Error(msg), props);
+  const baseOf = rec => { let u = rec.model; u += u.endsWith('/') ? '' : '/'; if (!/.+\/resolve\/.+\//.test(u)) u += 'resolve/main/'; return new URL(u).href; };
+  const recordOf = (lib, id) => lib?.prebuiltAppConfig?.model_list?.find(m => m.model_id === id) || null;
+  const opfsOk = () => !!(navigator.storage?.getDirectory && typeof FileSystemFileHandle !== 'undefined' && FileSystemFileHandle.prototype.createWritable);
+
+  /* ----- the two kinds of storage, written the way WebLLM 0.2.85 reads them ----- */
+  const hex = async s => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)))].map(b => b.toString(16).padStart(2, '0')).join('');
+  function cacheStore(scope) {
+    let c = null; const open = async () => (c ||= await caches.open(scope));
+    return {
+      async has(url) { return !!(await (await open()).match(url)); },
+      async size(url) { const r = await (await open()).match(url); return r ? (await r.blob()).size : -1; },
+      async text(url) { const r = await (await open()).match(url); return r ? r.text() : null; },
+      async put(url, blob, type) { await (await open()).put(new Request(url), new Response(blob, { headers: { 'content-type': type || 'application/octet-stream', 'content-length': String(blob.size) } })); },
+      async del(url) { try { await (await open()).delete(url); } catch {} },
+    };
+  }
+  function opfsStore(scope) {
+    let d = null;
+    const dir = async () => {
+      if (d) return d;
+      let x = await navigator.storage.getDirectory();
+      x = await x.getDirectoryHandle('tvmjs-opfs-store', { create: true });
+      for (const p of scope.split('/').filter(Boolean)) x = await x.getDirectoryHandle(encodeURIComponent(p), { create: true });
+      return (d = x);
+    };
+    const entry = async url => {
+      const x = await dir(), h = await hex(url);
+      try {
+        const rec = JSON.parse(await (await (await x.getFileHandle(h + '.record.json')).getFile()).text());
+        if (!rec || rec.url !== url || !Number.isSafeInteger(rec.nbytes)) return null;
+        return { rec, file: await (await x.getFileHandle(h + '.bin')).getFile() };
+      } catch { return null; }
+    };
+    const write = async (handle, data) => { const w = await handle.createWritable(); try { await w.write(data); await w.close(); } catch (e) { try { await w.abort(); } catch {} throw e; } };
+    return {
+      async has(url) { const e = await entry(url); return !!e && e.file.size === e.rec.nbytes; },
+      async size(url) { const e = await entry(url); return e && e.file.size === e.rec.nbytes ? e.file.size : e ? -2 : -1; },
+      async text(url) { const e = await entry(url); return e && e.file.size === e.rec.nbytes ? e.file.text() : null; },
+      async put(url, blob, type) {
+        const x = await dir(), h = await hex(url);
+        try { await x.removeEntry(h + '.record.json'); } catch {}
+        await write(await x.getFileHandle(h + '.bin', { create: true }), blob);
+        await write(await x.getFileHandle(h + '.record.json', { create: true }), new Blob([JSON.stringify({ url, nbytes: blob.size, contentType: type || 'application/octet-stream' })]));
+      },
+      async del(url) { const x = await dir(), h = await hex(url); for (const n of [h + '.record.json', h + '.bin']) { try { await x.removeEntry(n); } catch {} } },
+    };
+  }
+  const storeFor = (backend, scope) => (backend === 'opfs' ? opfsStore(scope) : cacheStore(scope));
+  const supports = backend => backend === 'cache' || (backend === 'opfs' && opfsOk());
+
+  /* ----- downloading one file ----- */
+  async function fetchBody(url, { signal, range, onBytes }) {
+    const ctl = new AbortController();
+    const stop = () => ctl.abort();
+    signal?.addEventListener('abort', stop, { once: true });
+    let idle = setTimeout(stop, T.idle), got = 0;
+    try {
+      const res = await fetch(url, { signal: ctl.signal, cache: 'no-store', credentials: 'omit', headers: range ? { Range: range } : undefined });
+      if (!res.ok) throw tag('HTTP ' + res.status, { status: res.status, fatal: res.status === 404 || res.status === 401 || res.status === 403 });
+      if (range && res.status !== 206) { try { res.body?.cancel(); } catch {} throw tag('no ranges', { noRange: true }); }
+      const reader = res.body.getReader(), chunks = [];
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        clearTimeout(idle); idle = setTimeout(stop, T.idle);
+        chunks.push(value); got += value.byteLength; onBytes(value.byteLength);
+      }
+      return new Blob(chunks);
+    } catch (e) {
+      onBytes(-got);
+      if (signal?.aborted) throw new Error('stopped');
+      if (ctl.signal.aborted) throw tag('The download stalled (no data for a minute)', { network: true });
+      throw e;
+    } finally { clearTimeout(idle); signal?.removeEventListener('abort', stop); }
+  }
+  async function retry(fn, ctx) {
+    for (let i = 1; ; i++) {
+      try { return await fn(); }
+      catch (e) {
+        if (ctx.signal?.aborted) throw new Error('stopped');
+        if (e.fatal || e.storage || e.space || e.noRange || i >= (ctx.tries || T.tries)) throw e;
+        ctx.onRetry?.(i, e);
+        await waitOnline(ctx.signal);
+        await sleep(Math.min(30e3, T.backoff * 2 ** (i - 1)), ctx.signal);
+      }
+    }
+  }
+  async function getFile(f, ctx) {
+    if (f.size > T.big && ctx.ranges !== false) {
+      try {
+        const parts = [];
+        for (let a = 0; a < f.size; a += T.piece) {
+          const b = Math.min(f.size, a + T.piece) - 1;
+          const p = await retry(() => fetchBody(f.url, { signal: ctx.signal, range: `bytes=${a}-${b}`, onBytes: ctx.onBytes }), ctx);
+          if (p.size !== b - a + 1) throw tag(`a piece of ${f.name} came back with the wrong size`, { network: true });
+          parts.push(p);
+        }
+        return new Blob(parts);
+      } catch (e) {
+        if (!e.noRange) throw e;
+        ctx.ranges = false;   // this server sends whole files only
+      }
+    }
+    return retry(() => fetchBody(f.url, { signal: ctx.signal, onBytes: ctx.onBytes }), ctx);
+  }
+  async function saveFile(f, blob, st) {
+    const put = async () => {
+      try { await st.put(f.url, blob, f.type); }
+      catch (e) { if (e?.name === 'QuotaExceededError' || /quota/i.test(String(e?.message))) throw tag('Not enough storage for the model', { space: true }); throw e; }
+    };
+    await put();
+    // read it back: some browsers save a big file but give back an empty or shorter copy
+    if (await st.size(f.url) === blob.size) return;
+    await st.del(f.url); await put();
+    if (await st.size(f.url) !== blob.size) throw tag('This browser saved the file, but gave back a damaged copy', { storage: true });
+  }
+
+  /* ----- the model's file list ----- */
+  async function smallFile(url, st, { fresh, signal, json }) {
+    let text = null;
+    if (fresh && navigator.onLine !== false) {
+      try {
+        const b = await retry(() => fetchBody(url, { signal, onBytes: () => {} }), { signal, tries: 3 });
+        text = await b.text();
+        if (json) JSON.parse(text);
+        return { text, net: true };
+      } catch (e) { if (signal?.aborted) throw new Error('stopped'); if (e?.fatal) throw e; text = null; }
+    }
+    text = await st.text(url);
+    if (text != null) { if (json) { try { JSON.parse(text); } catch { text = null; } } }
+    if (text == null) {
+      const b = await retry(() => fetchBody(url, { signal, onBytes: () => {} }), { signal });
+      text = await b.text(); if (json) JSON.parse(text);
+      return { text, net: true };
+    }
+    return { text, net: false };
+  }
+  async function plan(lib, id, backend, { fresh = false, signal } = {}) {
+    const rec = recordOf(lib, id);
+    if (!rec) return null;
+    const base = baseOf(rec);
+    const cfgSt = storeFor(backend, 'webllm/config'), modelSt = storeFor(backend, 'webllm/model'), wasmSt = storeFor(backend, 'webllm/wasm');
+    const cfgUrl = base + 'mlc-chat-config.json', tcUrl = base + 'tensor-cache.json';
+    const cfg = await smallFile(cfgUrl, cfgSt, { fresh, signal, json: true });
+    const tc = await smallFile(tcUrl, modelSt, { fresh, signal, json: true });
+    const index = JSON.parse(tc.text), config = JSON.parse(cfg.text);
+    const files = [];
+    const tok = (config.tokenizer_files || []).includes('tokenizer.json') ? 'tokenizer.json' : (config.tokenizer_files || []).includes('tokenizer.model') ? 'tokenizer.model' : null;
+    if (tok) files.push({ name: tok, url: base + tok, st: modelSt, size: null, est: 12e6, type: 'application/octet-stream' });
+    for (const r of index.records || []) files.push({ name: r.dataPath, url: new URL(r.dataPath, base).href, st: modelSt, size: r.nbytes, type: 'application/octet-stream' });
+    if (rec.model_lib && /^https?:/.test(rec.model_lib)) files.push({ name: 'model library', url: rec.model_lib, st: wasmSt, size: null, est: 8e6, type: 'application/wasm' });
+    return { rec, base, files, cfg: { url: cfgUrl, st: cfgSt, ...cfg }, tc: { url: tcUrl, st: modelSt, ...tc, index } };
+  }
+  /* Is each file there (and, with deep, whole)? */
+  async function audit(p, deep) {
+    const bad = [];
+    for (const f of p.files) {
+      const n = deep ? await f.st.size(f.url) : (await f.st.has(f.url) ? 0 : -1);
+      if (n === -1) bad.push({ f, why: 'missing' });
+      else if (deep && (n < 0 || (f.size != null ? n !== f.size : n === 0))) bad.push({ f, why: 'broken', had: n });
+    }
+    return bad;
+  }
+
+  /* Make sure every file of model `id` is saved and whole. Downloads only what is missing (or broken, with deep).
+     onProgress({ done, total, speed }) in bytes. Returns { downloaded, fixed, bytes }. */
+  async function ensure(lib, id, backend, { deep = false, signal, onProgress, onStep, onRetry } = {}) {
+    if (!supports(backend)) return null;
+    onStep?.('Checking the model files');
+    let p = await plan(lib, id, backend, { fresh: true, signal });
+    if (!p) return null;
+    // the model on the server changed since the index here was saved: the old files belong to another version
+    const oldText = await p.tc.st.text(p.tc.url);
+    if (p.tc.net && oldText != null && oldText !== p.tc.text) {
+      let old = null; try { old = JSON.parse(oldText); } catch {}
+      for (const r of old?.records || []) await p.tc.st.del(new URL(r.dataPath, p.base).href);
+    }
+    const bad = await audit(p, deep);
+    const fixed = bad.filter(b => b.why === 'broken').length;
+    for (const b of bad) if (b.why === 'broken') await b.f.st.del(b.f.url);
+    const todo = bad.map(b => b.f);
+    const total = todo.reduce((s, f) => s + (f.size ?? f.est), 0);
+    if (todo.length) {
+      // enough room? (a browser in private mode, or Safari, can give a site much less room than the disk has)
+      try {
+        const e = await navigator.storage?.estimate?.();
+        if (e && e.quota && e.quota - (e.usage || 0) < total * 1.05 + 50e6) throw tag('Not enough storage for the model', { space: true, need: total, free: Math.max(0, e.quota - (e.usage || 0)) });
+      } catch (e) { if (e.space) throw e; }
+      try { await navigator.storage?.persist?.(); } catch {}
+      onStep?.('Downloading');
+      let done = 0, last = { t: performance.now(), done: 0 }, speed = 0;
+      const ctx = { signal, ranges: undefined, onRetry,
+        onBytes: n => {
+          done = Math.max(0, done + n);
+          const now = performance.now();
+          if (now - last.t > 1000) { const s = (done - last.done) / ((now - last.t) / 1000); speed = speed ? speed * 0.7 + s * 0.3 : s; last = { t: now, done }; }
+          onProgress?.({ done, total, speed });
+        } };
+      onProgress?.({ done: 0, total, speed: 0 });
+      // the biggest files one at a time (they are held in memory until saved), the others 4 at a time
+      const big = todo.filter(f => f.size > T.big), small = todo.filter(f => !(f.size > T.big));
+      let bigChain = Promise.resolve();
+      const one = async f => {
+        const blob = await getFile(f, ctx);
+        if (f.size != null && blob.size !== f.size) throw tag(`${f.name} came back with ${blob.size} bytes instead of ${f.size}`, { network: true });
+        if (!blob.size) throw tag(`${f.name} came back empty`, { network: true });
+        await saveFile(f, blob, f.st);
+      };
+      const queue = [...small];
+      const worker = async () => { for (let f; (f = queue.shift());) await one(f); };
+      const bigRun = (async () => { for (const f of big) await (bigChain = bigChain.then(() => one(f))); })();
+      await Promise.all([bigRun, ...Array.from({ length: Math.min(T.parallel, Math.max(1, queue.length)) }, worker)]);
+    }
+    // the small index files last, so a half-finished download is never mistaken for a whole one
+    for (const s of [p.cfg, p.tc]) if (s.net || (await s.st.text(s.url)) == null) await saveFile({ url: s.url, name: s.url.split('/').pop(), type: 'application/json' }, new Blob([s.text], { type: 'application/json' }), s.st);
+    return { downloaded: todo.length, fixed, bytes: total };
+  }
+  /* Delete every file of model `id` from one kind of storage (also the index, which WebLLM's own delete leaves behind). */
+  async function forget(lib, id, backend) {
+    if (!supports(backend)) return;
+    const rec = recordOf(lib, id); if (!rec) return;
+    const base = baseOf(rec), modelSt = storeFor(backend, 'webllm/model');
+    let index = null; try { index = JSON.parse(await modelSt.text(base + 'tensor-cache.json')); } catch {}
+    for (const r of index?.records || []) await modelSt.del(new URL(r.dataPath, base).href);
+    for (const n of ['tensor-cache.json', 'tokenizer.json', 'tokenizer.model']) await modelSt.del(base + n);
+    await storeFor(backend, 'webllm/config').del(base + 'mlc-chat-config.json');
+    if (rec.model_lib) await storeFor(backend, 'webllm/wasm').del(rec.model_lib);
+  }
+  /* Settings → "Check the saved files": how many files are there and whole. */
+  async function check(lib, id, backend) {
+    if (!supports(backend)) return null;
+    const p = await plan(lib, id, backend).catch(() => null);
+    if (!p) return { ok: 0, bad: 0, missing: 1 };
+    const bad = await audit(p, true);
+    return { ok: p.files.length - bad.length, bad: bad.filter(b => b.why === 'broken').length, missing: bad.filter(b => b.why === 'missing').length, files: p.files.length };
+  }
+  return { ensure, forget, check, supports, opfsOk, _tune: o => Object.assign(T, o), _T: T };
+})();
+
+function isNetworkError(e) { return !!e?.network || /failed to fetch|networkerror|network error|load failed|err_internet|offline|stalled \(no data/i.test(String(e?.message || e)); }
 const BROKEN_FILES_RE = /exceeds shard size|Tensor-cache record|shard size|checksum|corrupt|unexpected end of|Unexpected EOF/i;
 function friendlyError(e) {
   const msg = String(e?.message || e || 'Unknown error');
   if (e?.hung) return 'The AI stopped responding for a long time (the graphics chip may have frozen), so Lumen stopped it and is loading the model again from the saved files. Press “Try again” in a moment. If it keeps happening, choose a smaller memory size or a smaller model in Settings.';
-  if (BROKEN_FILES_RE.test(msg)) return 'The saved model files are broken (a download was probably cut short). Lumen tried to delete them and download them again, but it did not work. Open Settings → Model, press “Delete download” on this model, and download it again on a stable connection.';
+  if (e?.space) return `There is not enough free storage for this model in this browser${e.need ? ` (it needs about ${fmtMB(e.need / 1e6)}${e.free != null ? `, and this site may use about ${fmtMB(e.free / 1e6)} more` : ''})` : ''}. Free some disk space, close private windows, delete a model you no longer use in Settings → Model, or pick a smaller model. Nothing was downloaded yet.`;
+  if (e?.storage) return 'This browser saved the model files but gave back damaged copies, also the second way of saving them. Free some disk space, restart the browser, and press “Try again”. If it keeps happening, use Google Chrome.';
+  if (e?.tooMany) return 'The saved model files were broken several times today, so Lumen stopped repairing them by itself to save your data. Open Settings → Model and press “Check the saved files”, or delete this model and download it again on a stable connection.';
+  if (BROKEN_FILES_RE.test(msg)) return 'A saved model file is broken and could not be repaired by itself. Open Settings → Model and press “Check the saved files”, or delete this model and download it again on a stable connection.';
   if (/^module: opened-as-file/i.test(msg)) return 'Chrome does not let a page that was opened as a file load the AI engine. Open the web link of Lumen instead. Or open the Terminal, go to the Lumen folder, run  python3 -m http.server 8000  and open http://localhost:8000 in Chrome.';
   if (/^module:/i.test(msg)) return 'The AI engine could not be loaded. The internet is needed the first time. Check your connection, then reload the page.';
-  if (isNetworkError(msg)) return 'The download stopped because the internet connection was lost. Parts that finished are saved. Check your connection and try again.';
+  if (isNetworkError(e)) return 'The download stopped because the internet connection was lost or too slow. The files that finished are saved, so it carries on where it stopped. Lumen tries again by itself when the internet is back, or press “Try again”.';
+  if (e?.status === 404) return 'The model files were not found on the server (Hugging Face). The model may have moved. Pick another model in Settings → Model, or update Lumen.';
   if (/context ?window|ContextWindowSizeExceeded|prompt.*(too long|exceed)/i.test(msg)) return 'This message is too long for the model to read at once. Shorten it, or start a new chat.';
   if (/quota|storage|space/i.test(msg)) return 'There is not enough free storage for the model in this browser. Free some disk space, or pick a smaller model.';
   if (/device.*lost|context.*lost/i.test(msg)) return 'The graphics chip was reset by the browser (this can happen when the screen sleeps or the memory is full). Lumen is loading the model again from the saved files. Press “Try again” in a moment.';
@@ -2098,6 +2454,12 @@ const Guard = {
     else if (reason === 'background') text = `The page was in the background or the screen was off ${where}, and the browser stopped it. Your chat is saved. Keep Lumen open on the screen while it works.`;
     else text = `The page stopped without an error message ${where}, and the browser started it again. The most likely reason is that the graphics chip ran out of memory. Your chat is saved. Close big tabs and other heavy apps first.`;
     if (stepped) text += ' ' + stepped;
+    // The page stopped twice in a day while this model was loading: it is probably too big for this computer.
+    // Then it is not started by itself any more (that could stop the page every time Lumen opens) until it loads once.
+    if (o.phase === 'loading' && reason !== 'background' && mdl && log.filter(c => c.model === o.model && c.phase === 'loading' && c.reason !== 'background').length >= 2) {
+      S.noAuto = o.model; saveSettings();
+      text += ` Lumen will not start ${name} by itself for now. Press Start to try again, or choose a smaller model.`;
+    }
     this.crash = { reason, phase: o.phase, model: o.model, text, stepped: !!stepped };
     return this.crash;
   },
@@ -2364,7 +2726,8 @@ function timeNotes(text, now = new Date(), zoneOverride = null) {
       if (c) lines.push(`Current time ${place ? 'in ' + place : 'on the user’s computer'}: ${c.time} (${c.date}), time zone ${zone} (${utcOffsetText(zone, now)}).`);
     } else if (place) return { needZone: place };
   }
-  if (!lines.length && /\b(what('s| is)? (the )?(date|day)( today| now)?|what day is (it|today)|today'?s date|what is today|current date|date today|what's today)\b/.test(t) && !/\b(until|till|before|between|since)\b/.test(t)) {
+  // "what day is it?" (but not "what day is 25 December?", which names another date)
+  if (!lines.length && /\b(what('s| is)? (the )?(date|day)( today| now)?|what day is (it|today)|today'?s date|what is today|current date|date today|what's today)\b/.test(t) && !/\b(until|till|before|between|since)\b/.test(t) && !parseAllDates(text, today).length) {
     lines.push(`Today is ${fmtDate(today)}. The time on the user’s computer is ${clockIn(myZone(), now)?.time} (${myZone()}).`);
   }
   // days until / since / between
@@ -2419,7 +2782,9 @@ function unitNotes(text) {
   if (from.dim === 'temp') out = toTemp(val, from.key, to.key);
   else out = val * from.factor / to.factor;
   const fmt = v => Math.abs(v) >= 1e9 || (Math.abs(v) < 1e-4 && v !== 0) ? v.toExponential(4) : String(Number(v.toPrecision(7)));
-  const plural = (n, name) => (Math.abs(n) === 1 || /°|^K$/.test(name) ? name : (name.endsWith('s') || /per /.test(name) ? name : name + 's'));
+  // 1 foot, 5 feet; 10 inches; 3 metres per second
+  const many = name => { const per = name.indexOf(' per '); if (per > 0) return many(name.slice(0, per)) + name.slice(per); return /foot$/.test(name) ? name.replace(/foot$/, 'feet') : /inch$/.test(name) ? name + 'es' : /s$/.test(name) ? name : name + 's'; };
+  const plural = (n, name) => (Math.abs(n) === 1 || /°|^K$/.test(name) ? name : many(name));
   return `${fmt(val)} ${plural(val, from.name)} = ${fmt(out)} ${plural(out, to.name)}`;
 }
 
@@ -8892,14 +9257,16 @@ function renderBrainCard() {
       let eta = '';
       const lm = Brain.model(Brain.loadingKey || S.model);
       if (Brain.phase === 'Downloading' && Brain.mb > 5 && Brain.elapsed > 3) {
-        const rate = Brain.mb / Brain.elapsed; const left = Math.max(0, (lm.downloadMB - Brain.mb) / rate);
-        eta = `${fmtMB(Brain.mb)} of ${fmtMB(lm.downloadMB)} · about ${fmtSecs(left)} left`;
+        const total = Brain.totalMB || lm.downloadMB, rate = Brain.speed || Brain.mb / Brain.elapsed, left = Math.max(0, (total - Brain.mb) / Math.max(0.01, rate));
+        eta = `${fmtMB(Brain.mb)} of ${fmtMB(total)} · ${rate >= 1 ? rate.toFixed(1) + ' MB/s' : Math.round(rate * 1000) + ' KB/s'} · about ${fmtSecs(left)} left`;
       }
+      if (Brain.retrying) eta = `The connection dropped. Trying again (${Brain.retrying} of 5)…`;
       card.append(h('div', { class: 'bi' },
         h('h3', { text: `${Brain.phase || 'Starting'}: ${lm.name}` }),
-        h('p', { text: Brain.phase === 'Downloading' ? 'This happens only once. You can type your question now; Lumen answers as soon as it is ready.' : 'Starting the model on your graphics chip.' }),
+        h('p', { text: Brain.phase === 'Downloading' ? 'This happens only once. Every file is checked as it arrives, and if the connection drops it carries on where it stopped. You can type your question now; Lumen answers as soon as it is ready.' : /Checking|another way/.test(Brain.phase) ? 'Checking that every saved file is whole. Only a broken file is downloaded again.' : 'Starting the model on your graphics chip.' }),
         h('div', { class: 'bar', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(pct) }, h('i', { style: `width:${pct}%` })),
-        h('div', { class: 'progress-meta' }, h('span', { text: `${pct}%` }), h('span', { text: eta }))));
+        h('div', { class: 'progress-meta' }, h('span', { text: `${pct}%` }), h('span', { text: eta }))),
+        Brain.phase === 'Downloading' ? h('div', { class: 'row' }, h('button', { class: 'btn ghost', type: 'button', text: 'Pause download', title: 'The finished files are kept. Press Download later to carry on.', onclick: () => { Brain.cancelLoad(); toast('Download paused. The finished files are kept: press Download to carry on.'); } })) : null);
       if (Brain.otherTab || Brain.stalled) {
         const hint = Brain.otherTab ? 'Lumen is also open in another tab or window. Close the other one, then reload this page. Two copies cannot both start the model on one computer.'
           : Brain.wasCached ? 'This is taking longer than usual. If nothing happens, Lumen will restart the loading by itself.'
@@ -8919,7 +9286,8 @@ function renderBrainCard() {
       const saved = Brain.cached[S.model];
       card.append(h('div', { class: 'bi' },
         h('h3', { text: saved ? `${m.name} is saved in this browser` : `Download ${m.name} to start` }),
-        h('p', { text: saved ? 'Start it to begin. It runs on your graphics chip and works without internet.'
+        h('p', { text: saved && S.noAuto === m.key ? `The page stopped twice while ${m.name} was loading, so Lumen did not start it by itself. It may be too big for this computer: close other apps and tabs, then press Start, or choose a smaller model.`
+          : saved ? 'Start it to begin. It runs on your graphics chip and works without internet.'
           : `${fmtMB(m.downloadMB)}, one time only, from Hugging Face (it sees your internet address). On a phone, use Wi-Fi. It is saved in this browser, then works offline.` })),
         h('div', { class: 'row' }, h('button', { class: 'btn primary', type: 'button', html: `${icon(saved ? 'bolt' : 'download', 15)}<span>${saved ? 'Start' : 'Download'}</span>`, onclick: () => Brain.load(S.model).catch(() => {}) }), changeBtn));
     }
@@ -8958,7 +9326,12 @@ function renderNet() {
     els.netChip.title = 'No internet. Lumen still answers from the AI model, but it cannot look things up. Saved look-ups still work.';
   }
 }
-window.addEventListener('online', () => { Net.health = {}; renderNet(); toast('Back online.'); });
+window.addEventListener('online', () => {
+  Net.health = {}; renderNet();
+  // a download that stopped because the internet went away carries on by itself (the finished files are kept)
+  if (Brain.state === 'error' && Brain.netFail && !App.run) { toast('Back online. Carrying on with the download.'); Brain.load(S.model).catch(() => {}); }
+  else toast('Back online.');
+});
 window.addEventListener('offline', () => { renderNet(); toast('You are offline. Lumen can still answer, but it cannot look things up.'); });
 
 /* ---------- About, Privacy, Terms and Credits; "Delete all my data"; AI labels; the helpline notice ----------
@@ -8993,6 +9366,7 @@ async function eraseEverything() {
   try { localStorage.clear(); sessionStorage.clear(); } catch {}
   // the AI model files, the page copy and every other database of this site
   try { for (const k of await caches.keys()) await caches.delete(k); } catch {}
+  try { const root = await navigator.storage.getDirectory(); for await (const name of root.keys()) await root.removeEntry(name, { recursive: true }).catch(() => {}); } catch {}
   try {
     const names = new Set(['lumen-chats', 'lumen-cache', 'lumen-kb', 'lumen-wikipack']);
     if (indexedDB.databases) for (const d of await indexedDB.databases()) if (d?.name) names.add(d.name);
@@ -10001,13 +10375,13 @@ window.addEventListener('beforeunload', e => { if (Brain.state === 'loading' && 
       delete S.loaded[S.model]; saveSettings();
       toast('The saved model is gone from this browser (browsers delete saved files when the disk is almost full or when site data is cleared). Press Download to get it again.', null, 12000);
     }
-    if (S.autoStart && Brain.cached[S.model] && Brain.state === 'idle') Brain.load(S.model).catch(() => {});
+    if (S.autoStart && Brain.cached[S.model] && Brain.state === 'idle' && S.noAuto !== S.model) Brain.load(S.model).catch(() => {});
   }
   Lab.resume().catch(() => {});
   if (!narrow()) els.input.focus();
 })();
 try { window.hljs?.configure({ ignoreUnescapedHTML: true }); } catch {}
-window.__lumen = { WEBLLM_URL, Guard, Bigger, Teach, Ground, Usage, LEGAL, Care, openLegal, labelCopy, showReadBox, WikiPack, Speech, Dictation, Lab, LabScore, LAB_QUESTIONS, LAB_PUZZLES, openLab, App, Brain, S, Calc, Net, Cache, splitStream, looping, trimRepeat, thinkTitle, renderMarkdown, shouldLookUp, keywordQuery, entityQuery, terms, cleanAnswer,
+window.__lumen = { WEBLLM_URL, ModelFiles, Guard, Bigger, Teach, Ground, Usage, LEGAL, Care, openLegal, labelCopy, showReadBox, WikiPack, Speech, Dictation, Lab, LabScore, LAB_QUESTIONS, LAB_PUZZLES, openLab, App, Brain, S, Calc, Net, Cache, splitStream, looping, trimRepeat, thinkTitle, renderMarkdown, shouldLookUp, keywordQuery, entityQuery, terms, cleanAnswer,
   localToolLines, timeNotes, unitNotes, fxIntent, weatherIntent, cryptoIntent, gather, selectDocText, chunkDoc, pickMode, pickPlaybook, planBudget, buildMessages, parseSlash, jsonFromText, STUDY_CHECK, readFileText, summarizeDocs, scheduleSummary, addMemory, Learn, Core, confidenceOf, Saver, Review, ROLES, setRole, getRole, solveParts, checkArithmetic, essayParagraphs, quoteInText, verifyComments, pickTop, runEssay, factCheck, claimsFrom, debateBalance, showFactCheck, chatToMarkdown, openSettings, submitText, send, wantDocs, plainText, slidesToHtml, chatToHtml, wikidataProps, webSearch, readPage, forkAt, switchFork, forkInfo, voteWorthy, finalAnswerOf, voteKey, voteTally, Examples, PROMPT_VERSIONS, basePrompt, EXAMPLES, systemPrompt, importBackup, Store, openChat, renderThread, saveChat, regenerate, resendEdited };
 </script>
 </body>
