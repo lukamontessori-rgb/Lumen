@@ -60,19 +60,20 @@ function wikiAnswer(url) {
 /* ---------- one page with all the pretend servers ---------- */
 const hits = new Map();   // url -> number of requests (model files)
 const faults = { abortTimes: new Map(), status: new Map(), noRange: false, slowMs: 0 };
-async function newPage({ viewport = { width: 1280, height: 860 }, init = {}, context: ctxIn, gpu = true } = {}) {
+async function newPage({ viewport = { width: 1280, height: 860 }, init = {}, context: ctxIn, gpu = true, firstRun = false } = {}) {
   const context = ctxIn || await browser.newContext({ viewport });
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push('pageerror: ' + (e.stack || e.message)));
   page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource|net::ERR|status of 40\d|status of 50\d|JSON attempt failed|A saved model file is broken|engine said|Something odd happened|Error: stopped|stalled|cancelled|worker-failed|exceeds shard size|Tensor-cache record/.test(m.text())) errors.push('console: ' + m.text()); });
-  await page.addInitScript(({ init, gpu }) => {
+  await page.addInitScript(({ init, gpu, firstRun }) => {
     globalThis.__fakeLLM = { tokenDelay: 1, ...init };
+    try { if (!firstRun && !localStorage.getItem('lumen.settings')) localStorage.setItem('lumen.settings', JSON.stringify({ setupDone: 2 })); } catch {}   // the setup questions are tested on their own (sandboxed preview frames have no storage)
     if (gpu) {
       const adapter = { features: new Set(['shader-f16']), info: { vendor: 'apple', architecture: 'metal-3', description: '' }, limits: { maxBufferSize: 4294967296, maxStorageBufferBindingSize: 4294967292 }, requestDevice: async () => ({ lost: new Promise(() => {}), limits: {}, features: new Set() }) };
       Object.defineProperty(navigator, 'gpu', { configurable: true, value: { requestAdapter: async () => adapter, getPreferredCanvasFormat: () => 'bgra8unorm' } });
     } else Object.defineProperty(navigator, 'gpu', { configurable: true, value: undefined });
-  }, { init, gpu });
+  }, { init, gpu, firstRun });
   await context.route(/^https:\/\/(huggingface\.co|raw\.githubusercontent\.com)\//, async route => {
     const url = route.request().url();
     hits.set(url, (hits.get(url) || 0) + 1);
@@ -477,6 +478,156 @@ test('crash guard: a model that stopped the page twice while loading is not star
   eq(await L(page, () => window.__lumen.S.noAuto), 'Qwen3.5-2B', 'marked');
   eq(await L(page, () => window.__lumen.Brain.state), 'idle', 'not started by itself');
   assert(/did not start it by itself/.test(await page.textContent('body')), 'explained');
+  eq(errors, [], 'errors');
+});
+
+/* ===================== new in version 18 ===================== */
+test('setup: model advice for each kind of computer', async () => {
+  const { page } = await open();
+  const r = await L(page, () => { const { Setup } = window.__lumen; const b = c => Setup.plan(c).best;
+    return [b({ device: 'mba', ram: 8 }), b({ device: 'mba', ram: 16 }), b({ device: 'mbp', ram: 16, tier: 'pro' }), b({ device: 'mbp', ram: 24 }), b({ device: 'mbp', ram: 32, tier: 'max' }),
+      b({ device: 'winlap', ram: 16, gpu: 'igpu' }), b({ device: 'pc', ram: 32, gpu: 'dgpu8' }), b({ device: 'pc', ram: 16, gpu: 'dgpu4' }), b({ device: 'phone' }), b({ device: 'mba', ram: 16, tier: 'intel' }), b({ device: 'tablet', ram: 8 }),
+      Setup.plan({ device: 'mba', ram: 8 }).fit['Qwen3.5-9B'], Setup.plan({ device: 'mba', ram: 16 }).fit['Qwen3.5-9B']]; });
+  eq(r, ['Qwen3.5-2B', 'Qwen3.5-4B', 'Qwen3.5-9B', 'Qwen3.5-9B', 'Qwen3.5-9B', 'Qwen3.5-4B', 'Qwen3.5-9B', 'Qwen3.5-4B', 'Qwen3.5-0.8B', 'Qwen3.5-2B', 'Qwen3.5-2B', 'big', 'big'], 'advice');
+});
+test('setup: the first visit asks the questions and downloads the right model by itself', async () => {
+  const { page, errors } = await open({ firstRun: true });
+  await page.waitForSelector('dialog.setup[open]');
+  await page.fill('dialog.setup input[type=text]', 'Luka');
+  await page.click('.su-next');                                   // name
+  await page.click('.su-card:has-text("MacBook Pro")'); await page.click('.su-next');
+  await page.click('.su-pill:has-text("16 GB")'); await page.click('.su-card:has-text("A Pro chip")'); await page.click('.su-next');
+  await page.click('.su-card:has-text("Coding")'); await page.click('.su-next');
+  await page.click('.su-card:has-text("Short")'); await page.click('.su-next');
+  await page.click('.su-next');                                   // look-ups: keep the default
+  const rec = await page.textContent('.su-sub');
+  assert(/Qwen3\.5 9B/.test(rec), 'recommends the 9B for a MacBook Pro with 16 GB and a Pro chip: ' + rec);
+  await page.click('.su-next');                                   // Download and start
+  await until(page, () => window.__lumen.Brain.state === 'ready', null, 30000);
+  const S = await L(page, () => { const s = window.__lumen.S; return { model: s.model, name: s.name, style: s.style, uses: s.uses, strong: s.strongPc, done: s.setupDone, dev: s.computer.device, ram: s.computer.ram }; });
+  eq(S, { model: 'Qwen3.5-9B', name: 'Luka', style: 'short', uses: ['coding'], strong: true, done: 2, dev: 'mbp', ram: 16 }, 'saved answers');
+  await page.reload();
+  await until(page, () => window.__lumen && window.__lumen.Brain.state === 'ready', null, 30000);   // starts by itself next time
+  eq(await page.$('dialog.setup[open]'), null, 'not asked again');
+  eq(errors, [], 'errors');
+});
+test('setup: skip keeps the defaults and is not asked again', async () => {
+  const { page, errors } = await open({ firstRun: true });
+  await page.waitForSelector('dialog.setup[open]');
+  await page.click('text=Skip for now');
+  eq(await L(page, () => window.__lumen.S.setupDone), 1, 'skipped');
+  await page.reload(); await page.waitForTimeout(500);
+  eq(await page.$('dialog.setup[open]'), null, 'not asked again');
+  eq(errors, [], 'errors');
+});
+test('temporary chat: not saved, not in the list, gone when you leave', async () => {
+  const { page, errors } = await open();
+  await download(page);
+  await page.click('#tempBtn');
+  await ask(page, 'I have an iPhone 17. What is a good case?');
+  const r = await L(page, async () => { const { App, S } = window.__lumen; const c = App.chats.find(x => x.id === App.currentId);
+    const db = await new Promise(res => { const q = indexedDB.open('lumen-chats'); q.onsuccess = () => res(q.result); });
+    const saved = await new Promise(res => { const q = db.transaction('chats').objectStore('chats').getAll(); q.onsuccess = () => res(q.result.length); });
+    return { temp: c.temp, saved, listed: document.querySelectorAll('.chat-item').length, mem: S.memory.length }; });
+  eq(r, { temp: true, saved: 0, listed: 0, mem: 0 }, 'temporary');
+  await page.click('#newChat');
+  eq(await L(page, () => window.__lumen.App.chats.length), 0, 'gone after leaving');
+  eq(errors, [], 'errors');
+});
+test('projects: instructions and files reach every chat in the project', async () => {
+  const { page, errors } = await open();
+  await download(page);
+  await page.click('#navProjects');
+  await page.click('text=New project');
+  await page.fill('#askInput', 'Biology exam'); await page.click('#askOk');
+  await page.waitForSelector('.pv-project');
+  await page.fill('.pv-side textarea', 'Always end with the words BANANA RULE.'); await page.click('.pv-title');
+  await page.keyboard.press('Escape');
+  await L(page, () => { const { Projects } = window.__lumen; const p = Projects.list()[0]; p.docs = [{ id: 'd1', name: 'notes.txt', kind: 'txt', text: 'Mitochondria are the powerhouse of the cell. The secret word is ZEBRA.', chars: 70, pages: 0 }]; return Projects.save(p); });
+  await page.fill('#input', 'What do my notes say about mitochondria?');
+  await page.press('#input', 'Enter');
+  await until(page, () => !window.__lumen.App.run && window.__lumen.App.chats.length === 1 && window.__lumen.App.chats[0].messages.length === 2, null, 20000);
+  const r = await L(page, () => { const req = window.__fakeLLM.requests.filter(q => q.max_tokens !== 1).pop(); const c = window.__lumen.App.chats[0]; return { sys: /BANANA RULE/.test(req.messages[0].content), doc: /ZEBRA/.test(req.messages[req.messages.length - 1].content), project: !!c.project }; });
+  eq(r, { sys: true, doc: true, project: true }, 'project used');
+  assert(/Biology exam/.test(await page.textContent('#chatTitle')), 'project shown above the chat');
+  eq(errors, [], 'errors');
+});
+test('artifacts: a web page opens in the side panel and is listed', async () => {
+  const { page, errors } = await open();
+  await download(page);
+  await L(page, () => { window.__fakeLLM.answer = req => /button page/.test(JSON.stringify(req.messages.slice(-1))) ? 'Here it is:\n\n```html\n<!doctype html>\n<title>Click counter</title>\n<button id=b>0</button>\n<script>b.onclick=()=>b.textContent=+b.textContent+1</script>\n```' : null; });
+  await ask(page, 'make a button page');
+  await page.click('.codeblock .cb-btn:has-text("Open")');
+  await page.waitForSelector('#panel:not([hidden]) iframe.panel-frame');
+  await page.click('.ptab:has-text("Code")');
+  await page.waitForSelector('#panel .panel-code');
+  await page.click('#panel [aria-label="Close the panel"]');
+  await page.click('#navArtifacts');
+  await page.waitForSelector('.pv-card.art:has-text("Click counter")');
+  eq(errors, [], 'errors');
+});
+test('composer: model picker, tools menu, styles and tags', async () => {
+  const { page, errors } = await open();
+  await page.click('#modelChip');
+  await page.click('.menu button:has-text("Qwen3.5 0.8B")');
+  await until(page, () => window.__lumen.S.model === 'Qwen3.5-0.8B');
+  await page.click('#toolsBtn');
+  await page.click('.menu button:has-text("Short")');
+  await page.waitForSelector('.ctag:has-text("Short")');
+  await page.click('.ctag:has-text("Short") button');
+  await until(page, () => window.__lumen.S.style === 'normal');
+  await page.click('#toolsBtn');
+  await page.click('.menu button:has-text("Create a style")');
+  await page.click('.stylebox .chip-btn:has-text("Socratic")');
+  await page.click('.stylebox .btn.primary');
+  await until(page, () => /^c_/.test(window.__lumen.S.style));
+  const st = await L(page, () => window.__lumen.S.style);
+  assert(/^c_/.test(st), 'custom style chosen: ' + st);
+  await page.waitForSelector('.ctag:has-text("Socratic")');
+  eq(errors, [], 'errors');
+});
+test('answers: continue, quote, branch, shorter', async () => {
+  const { page, errors } = await open();
+  await download(page);
+  await L(page, () => { window.__fakeLLM.answer = req => /\[\[long\]\]/.test(JSON.stringify(req.messages.slice(-1))) ? 'A long answer that goes on and on and on' : null; });
+  await ask(page, 'tell me everything [[long]]');
+  await page.click('.chip-btn:has-text("Continue")');
+  await until(page, () => !window.__lumen.App.run && window.__lumen.App.chats[0].messages.length === 4);
+  // quote: select words in the answer
+  await L(page, () => { const p = document.querySelector('.msg-ai .md p'); const r = document.createRange(); r.selectNodeContents(p); const s = getSelection(); s.removeAllRanges(); s.addRange(r); });
+  await page.click('.quote-btn');
+  assert(/^> /.test(await page.inputValue('#input')), 'quoted');
+  await page.fill('#input', '');
+  // branch from the first answer
+  await page.click('.msg-ai >> nth=0 >> [aria-label="More"]');
+  await page.click('.menu button:has-text("Branch in a new chat")');
+  await until(page, () => window.__lumen.App.chats.length === 2);
+  eq(await L(page, () => window.__lumen.App.chats.find(c => c.id === window.__lumen.App.currentId).messages.length), 2, 'branched');
+  // shorter
+  await page.click('.msg-ai.last [aria-label="More"]');
+  await page.click('.menu button:has-text("Shorter")');
+  await until(page, () => !window.__lumen.App.run && window.__lumen.App.chats.find(c => c.id === window.__lumen.App.currentId).messages.length === 4);
+  eq(errors, [], 'errors');
+});
+test('home: categories open their suggestions', async () => {
+  const { page, errors } = await open();
+  await page.click('.chips button:has-text("Code")');
+  await page.click('.sugg .it:has-text("Make a small web page")');
+  assert(/HTML page/.test(await page.inputValue('#input')), 'filled');
+  eq(errors, [], 'errors');
+});
+test('settings: check the saved files finds and repairs a broken one', async () => {
+  hits.clear();
+  const { page, errors } = await open();
+  await download(page);
+  await L(page, () => window.__lumen.openSettings('models'));
+  await page.click('text=Check the saved files');
+  await page.waitForSelector('text=/saved and whole/');
+  await L(page, async () => { const c = await caches.open('webllm/model'); const k = (await c.keys()).find(r => /params_shard_4\.bin$/.test(r.url)); await c.put(k, new Response(new Uint8Array(10))); });
+  await page.click('text=Check the saved files');
+  await page.waitForSelector('text=/downloading only that one again/');
+  await until(page, () => window.__lumen.Brain.state === 'ready', null, 20000);
+  eq((await savedBytes(page))['params_shard_4.bin'], SHARDS[4], 'repaired');
   eq(errors, [], 'errors');
 });
 
