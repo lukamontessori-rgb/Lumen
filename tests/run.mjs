@@ -711,6 +711,15 @@ test('download: switching to another model during a download starts that one at 
   await until(page, () => window.__lumen.Brain.state === 'ready' && window.__lumen.Brain.loadedKey === 'Qwen3.5-0.8B', null, 20000);
   eq(errors, [], 'errors');
 });
+test('download: picking another model just after one started (while it warms up) is not refused', async () => {
+  const { page, errors } = await open({ init: { tokenDelay: 1500 } });   // the one-word warm-up answer takes 1.5 seconds
+  await L(page, () => window.__lumen.Brain.load('Qwen3.5-2B'));
+  await until(page, () => window.__lumen.Brain.state === 'ready' && window.__lumen.Brain.busy);
+  await page.click('#modelChip');
+  await page.click('.menu button:has-text("Qwen3.5 0.8B")');
+  await until(page, () => window.__lumen.Brain.state === 'ready' && window.__lumen.Brain.loadedKey === 'Qwen3.5-0.8B', null, 20000);
+  eq(errors, [], 'errors');
+});
 
 /* ===================== older features, end to end ===================== */
 import zlib from 'node:zlib';
@@ -919,6 +928,7 @@ test('code: Mermaid diagrams are drawn and JavaScript runs in the locked box', a
   await L(page, () => { window.__fakeLLM.answer = req => { const u = JSON.stringify(req.messages.slice(-1)); return /diagram please/.test(u) ? '```mermaid\ngraph TD\n  A[Start] --> B[End]\n```' : /run js/.test(u) ? '```js\nconsole.log(6 * 7)\n```' : null; }; });
   await ask(page, 'diagram please');
   await page.waitForSelector('.diagram svg', { timeout: 15000 });
+  assert(/Start/.test(await page.textContent('.diagram')) && /End/.test(await page.textContent('.diagram')), 'the boxes have their labels');
   await ask(page, 'run js');
   await page.click('.msg-ai.last .cb-btn:has-text("Run")');
   await page.waitForSelector('.msg-ai.last .run-log:has-text("42")', { timeout: 10000 });

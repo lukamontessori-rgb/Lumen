@@ -76,7 +76,7 @@ Every switch can be turned off, and "Forget what Lumen noticed" and "Empty the s
 
 **Fixed glitches** found by the new tests: "5 foots" (now "5 feet", "10 inches", "metres per second"); "what day is 25 December 2026?" answered with today's date; a short one-page PDF was refused as "a scan"; buttons on the download card could miss a click while the progress moved; backups now include projects and styles and never temporary chats.
 
-**Tests.** The folder `tests/` has 57 end-to-end tests (`node tests/run.mjs`, see `tests/README.md`). They drive the real page in Chromium with a pretend AI engine that reads and checks model files exactly the way WebLLM does, and pretend versions of Hugging Face and Wikipedia, so they need no graphics chip and no internet.
+**Tests.** The folder `tests/` has 58 end-to-end tests (`node tests/run.mjs`, see `tests/README.md`). They drive the real page in Chromium with a pretend AI engine that reads and checks model files exactly the way WebLLM does, and pretend versions of Hugging Face and Wikipedia, so they need no graphics chip and no internet.
 
 ## What is new in version 17: a restart guard and a stronger model
 
