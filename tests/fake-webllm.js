@@ -170,6 +170,13 @@ function answerFor(req, t) {
     if (/"slides"/.test(u) || /slide decks/i.test(sys)) return JSON.stringify({ title: 'Test deck', subtitle: 'A test', slides: [1, 2, 3, 4].map(i => ({ title: `Slide ${i}`, bullets: ['First point here', 'Second point here', 'Third point here'], notes: 'Say this.' })) });
     return '{}';
   }
+  if (/^You give feedback on ONE paragraph/.test(sys)) {
+    const para = (u.match(/<paragraph>\n?([\s\S]*?)\n?<\/paragraph>/) || [, ''])[1];
+    const sent = (para.match(/[^.!?]{25,}[.!?]/) || [para])[0].trim();
+    return JSON.stringify({ comments: [{ quote: sent, kind: 'Clarity', comment: 'Say this more simply.', better: 'A simpler sentence.' }] });
+  }
+  if (/^You choose the most important fixes/.test(sys)) return JSON.stringify({ top: [1], extra: [] });
+  if (/^You estimate the level a student essay/.test(sys)) return JSON.stringify({ levels: [] });
   if (/^You write Wikipedia search queries/.test(sys)) return 'photosynthesis\nplant energy';
   if (/^You list the factual claims/.test(sys)) return 'Paris is the capital of France.\nThe Eiffel Tower was finished in 1889.';
   if (/^You check one claim/.test(sys)) return 'supported';

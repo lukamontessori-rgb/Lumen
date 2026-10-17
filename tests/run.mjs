@@ -631,6 +631,303 @@ test('settings: check the saved files finds and repairs a broken one', async () 
   eq(errors, [], 'errors');
 });
 
+test('voice conversation: what you say is sent after a pause, read aloud, then Lumen listens again', async () => {
+  const { page, context, errors } = await newPage();
+  await page.addInitScript(() => {
+    localStorage.setItem('lumen.settings', JSON.stringify({ setupDone: 2, dictation: { on: true, mode: 'online', lang: 'en-US' } }));
+    let n = 0;
+    window.webkitSpeechRecognition = window.SpeechRecognition = class { start() { const k = n++; window.__srStarts = n; if (k === 0) setTimeout(() => this.onresult?.({ results: [[{ transcript: 'what is photosynthesis' }]] }), 80); } stop() { setTimeout(() => this.onend?.(), 10); } abort() {} };
+    window.__spoken = [];
+    Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: { speak(u) { window.__spoken.push(u.text); setTimeout(() => u.onend?.(), 15); }, cancel() {}, getVoices: () => [] } });
+  });
+  await page.goto(BASE);
+  await page.waitForFunction(() => window.__lumen && window.__lumen.Brain.state !== 'checking');
+  await download(page);
+  await page.click('#voiceBtn');
+  await until(page, () => window.__lumen.App.chats.length === 1 && window.__lumen.App.chats[0].messages.length === 2 && !window.__lumen.App.run, null, 15000);
+  await until(page, () => window.__spoken.length > 0 && window.__srStarts >= 2, null, 10000);
+  assert(/Listening/.test(await page.textContent('.voice-bar')), 'listening again');
+  await page.click('.voice-bar button');
+  eq(await page.$('.voice-bar'), null, 'ended');
+  eq(errors, [], 'errors');
+  await context.close();
+});
+
+for (const vp of [{ width: 1280, height: 860, name: 'desktop' }, { width: 390, height: 844, name: 'phone' }]) test(`monkey (${vp.name}): every command, page and menu opens without errors`, async () => {
+  const { page, errors } = await open({ viewport: { width: vp.width, height: vp.height } });
+  await download(page);
+  await ask(page, 'What is photosynthesis?');
+  const n = await L(page, () => window.__lumen ? document.querySelectorAll('#palList .pal-row').length : 0);
+  // every action in the command palette
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+k' : 'Control+k');
+  await page.waitForSelector('dialog.palette[open]');
+  const labels = await L(page, () => { const inp = document.getElementById('palInput'); inp.value = ' '; inp.dispatchEvent(new Event('input')); return [...document.querySelectorAll('#palList .pal-row b')].map(b => b.textContent); });
+  await page.keyboard.press('Escape');
+  const skip = /Delete all|Install|Learn now|voice|Check the internet/i;
+  const acts = await L(page, () => 0);
+  for (const label of ['New chat', 'New temporary chat', 'Projects', 'Artifacts', 'Choose the AI model', 'Set up Lumen', 'Create an answer style', 'What can Lumen do', 'Open settings', 'Privacy', 'About Lumen', 'Terms of use', 'Credits', 'Memory', 'What Lumen has learned', 'Switch theme', 'Show or hide the sidebar']) {
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+k' : 'Control+k');
+    await page.waitForSelector('dialog.palette[open]');
+    await page.fill('#palInput', label);
+    await page.waitForTimeout(40);
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(150);
+    for (let k = 0; k < 3; k++) { await page.keyboard.press('Escape'); await page.waitForTimeout(40); }
+    await L(page, () => { for (const d of document.querySelectorAll('dialog[open]')) d.close(); });
+  }
+  // every settings page
+  await L(page, () => window.__lumen.openSettings());
+  const tabs = await page.$$('#setNav .set-tab');
+  for (let i = 0; i < tabs.length; i++) { await (await page.$$('#setNav .set-tab'))[i].click(); await page.waitForTimeout(60); if (vp.name === 'phone') await page.click('#setBack').catch(() => {}); }
+  await L(page, () => document.getElementById('settings').close());
+  // the menus in the chat
+  await L(page, () => window.__lumen.openChat(window.__lumen.App.chats.find(c => !c.temp)?.id));
+  for (const sel of ['#toolsBtn', '#modeBtn', '#modelChip', '#plusBtn', '.msg-ai.last [aria-label="More"]', '#chatTitle .title-btn', '#moreBtn']) {
+    const el = await page.$(sel);
+    if (!el || !(await el.isVisible())) continue;
+    await el.click(); await page.waitForTimeout(60); await page.keyboard.press('Escape'); await page.waitForTimeout(30);
+  }
+  if (vp.name === 'phone') {
+    if (!(await L(page, () => document.getElementById('app').classList.contains('nav-open')))) await page.click('#menuBtn');
+    await page.waitForTimeout(300); await page.click('#scrim', { position: { x: 370, y: 400 } });
+  } else {
+    if (await L(page, () => document.getElementById('app').classList.contains('rail-off'))) await page.click('#menuBtn');
+    await page.click('#railModel'); await page.keyboard.press('Escape');
+  }
+  const w = await L(page, () => [document.documentElement.scrollWidth, window.innerWidth]);
+  assert(w[0] <= w[1], 'no sideways scrolling: ' + w);
+  eq(errors, [], 'errors');
+});
+
+/* ===================== older features, end to end ===================== */
+import zlib from 'node:zlib';
+function tinyPdf(text) {
+  const objs = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>', '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>'];
+  const stream = `BT /F1 14 Tf 72 720 Td (${text}) Tj ET`;
+  objs.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  let out = '%PDF-1.4\n'; const offs = [];
+  objs.forEach((o, i) => { offs.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const x = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + offs.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('') + `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${x}\n%%EOF`;
+  return Buffer.from(out, 'latin1');
+}
+async function tinyDocx(text) {
+  let docx; try { docx = await import('docx'); } catch { docx = createRequire(import.meta.url)('/opt/node-tools/node_modules/docx'); }
+  const d = new docx.Document({ sections: [{ children: [new docx.Paragraph({ text: 'My notes', heading: docx.HeadingLevel.HEADING_1 }), new docx.Paragraph(text)] }] });
+  return docx.Packer.toBuffer(d);
+}
+test('files: text, CSV, Word and PDF are read and used for the answer', async () => {
+  const { page, errors } = await open();
+  await download(page);
+  const files = [
+    { name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('The secret word of the text file is KIWI.') },
+    { name: 'table.csv', mimeType: 'text/csv', buffer: Buffer.from('name,score\nAna,12\nBor,15\n') },
+    { name: 'essay.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', buffer: await tinyDocx('The secret word of the Word file is MANGO.') },
+    { name: 'paper.pdf', mimeType: 'application/pdf', buffer: tinyPdf('The secret word of the PDF is LEMON.') },
+  ];
+  await page.setInputFiles('#fileInput', files);
+  await until(page, () => window.__lumen.App.pending.length >= 3 && window.__lumen.App.pending.every(d => !d.loading), null, 20000).catch(() => {});
+  await page.waitForTimeout(1500);
+  const state = await L(page, () => ({ pending: window.__lumen.App.pending.map(d => [d.name, d.kind, d.loading, (d.text || '').slice(0, 60)]), toast: document.getElementById('toastText').textContent }));
+  assert(state.pending.length === 4 && state.pending.every(d => !d[2]), 'files read: ' + JSON.stringify(state));
+  const kinds = await L(page, () => window.__lumen.App.pending.map(d => d.kind + ':' + /KIWI|MANGO|LEMON|Ana/.test(d.text)));
+  eq(kinds, ['txt:true', 'csv:true', 'docx:true', 'pdf:true'], 'every file was read');
+  await ask(page, 'What are the secret words in my files?');
+  const r = await L(page, () => { const req = window.__fakeLLM.requests.filter(q => q.max_tokens !== 1).pop(); const u = req.messages[req.messages.length - 1].content; return ['KIWI', 'MANGO', 'LEMON'].map(w => u.includes(w)); });
+  eq(r, [true, true, true], 'the files reached the AI');
+  eq(errors, [], 'errors');
+});
+test('memory: remember, notice and forget', async () => {
+  const { page, errors } = await open();
+  await download(page);
+  await ask(page, 'remember that my exam is on Friday');
+  await ask(page, 'I have an iPhone 17 and I live in Ljubljana.');
+  let mem = await L(page, () => window.__lumen.S.memory.map(m => m.text));
+  assert(mem.some(t => /exam is on Friday/.test(t)), 'remembered: ' + mem);
+  assert(mem.some(t => /iPhone 17/.test(t)), 'noticed: ' + mem);
+  const sys = await L(page, () => window.__fakeLLM.requests.filter(q => q.max_tokens !== 1).pop().messages[0].content);
+  assert(/exam is on Friday/.test(sys), 'memory reaches the AI');
+  await page.fill('#input', '/forget exam'); await page.press('#input', 'Enter');
+  await until(page, () => !window.__lumen.S.memory.some(m => /exam/.test(m.text)));
+  eq(errors, [], 'errors');
+});
+test('slash commands: solve, both sides, vote, role, convert, time, help, export', async () => {
+  const { page, errors } = await open();
+  await download(page);
+  for (const cmd of ['/solve 3x + 7 = 22', '/both should schools ban phones', '/vote a farmer has 17 sheep and all but 9 run away, how many are left?', '/convert 5 miles in km', '/time Tokyo', '/simple why is the sky blue']) {
+    const m = await ask(page, cmd);
+    eq(m.state, 'done', cmd);
+  }
+  await page.fill('#input', '/role tutor'); await page.press('#input', 'Enter');
+  await page.waitForSelector('.ctag:has-text("Tutor")');
+  await page.fill('#input', '/help'); await page.press('#input', 'Enter');
+  await page.waitForSelector('#viewer[open]'); await page.keyboard.press('Escape');
+  const [dl] = await Promise.all([page.waitForEvent('download'), (async () => { await page.fill('#input', '/export'); await page.press('#input', 'Enter'); })()]);
+  assert(/\.md$/.test(dl.suggestedFilename()), 'exported ' + dl.suggestedFilename());
+  eq(errors, [], 'errors');
+});
+test('answers: fact check, thumbs up and down with a correction', async () => {
+  const { page, errors } = await open();
+  await download(page);
+  await ask(page, 'When was the Eiffel Tower finished?');
+  await page.click('.fc-btn');
+  await page.waitForSelector('#viewer .fc-list', { timeout: 15000 });
+  await page.keyboard.press('Escape');
+  await page.click('.msg-ai.last [aria-label="Good answer"]');
+  await until(page, () => window.__lumen.App.chats[0].messages[1].rating === 'up');
+  await page.click('.msg-ai.last [aria-label="Wrong answer"]');
+  await page.waitForSelector('#teach[open]');
+  await page.click('#teachWhy .check >> nth=0');
+  await page.fill('#teachFix', 'The Eiffel Tower was finished in 1889.');
+  await page.click('#teachSave');
+  await until(page, () => window.__lumen.S.memory.some(m => /1889/.test(m.text)));
+  eq(errors, [], 'errors');
+});
+test('settings: theme, text size, answer font and send key', async () => {
+  const { page, errors } = await open();
+  await L(page, () => window.__lumen.openSettings('look'));
+  await page.click('#set-look [role=radio]:has-text("Dark")');
+  eq(await L(page, () => document.documentElement.dataset.theme), 'dark', 'dark theme');
+  await page.click('#set-look [role=radio]:has-text("Large")');
+  eq(await L(page, () => getComputedStyle(document.documentElement).getPropertyValue('--tscale').trim()), '1.14', 'text size');
+  await page.click('#set-look [role=radio]:has-text("Sans")');
+  eq(await L(page, () => document.documentElement.dataset.font), 'sans', 'answer font');
+  await page.click('#set-look [role=radio]:has-text("+ Enter")');
+  await L(page, () => document.getElementById('settings').close());
+  await download(page);
+  await page.fill('#input', 'hello'); await page.press('#input', 'Enter');
+  eq(await L(page, () => window.__lumen.App.chats.length), 0, 'Enter makes a new line now');
+  await page.press('#input', 'Control+Enter');
+  await until(page, () => window.__lumen.App.chats.length === 1);
+  eq(errors, [], 'errors');
+});
+test('backup: chats, projects and styles survive a save and restore', async () => {
+  const { page, errors } = await open();
+  await download(page);
+  await ask(page, 'hello');
+  await L(page, async () => { const { Projects, S } = window.__lumen; await Projects.save({ id: 'pp', name: 'Physics', about: '', instructions: 'Use SI units.', docs: [], created: 1, updated: 2 }); S.styles = [{ key: 'c_abc', label: 'Mine', desc: '', prompt: 'Be brief and kind.' }]; });
+  const [dl] = await Promise.all([page.waitForEvent('download'), L(page, () => { window.__lumen.openSettings('storage'); document.querySelector('#set-storage .btn').click(); })]);
+  const path = await dl.path();
+  const json = JSON.parse((await import('node:fs')).readFileSync(path, 'utf8'));
+  eq([json.chats.length, json.projects.length, json.settings.styles.length], [1, 1, 1], 'in the backup');
+  const { page: p2, errors: e2 } = await open();
+  await L(p2, () => window.__lumen.openSettings('storage'));
+  await p2.setInputFiles('#set-storage input[type=file]', path);
+  await until(p2, () => window.__lumen.App.chats.length === 1 && window.__lumen.Projects.list().length === 1 && window.__lumen.S.styles.length === 1);
+  eq([...errors, ...e2], [], 'errors');
+});
+test('offline Wikipedia: a pack is imported and used instead of the internet', async () => {
+  const { page, errors } = await open();
+  await download(page);
+  const lines = [JSON.stringify({ lumenWiki: 1, count: 3, lang: 'en', source: 'test', built: '2026-10-01' }),
+    JSON.stringify({ t: 'Mitochondrion', x: 'A mitochondrion is an organelle found in the cells of most eukaryotes. It is called the powerhouse of the cell because it makes most of the energy.' }),
+    JSON.stringify({ t: 'Volcano', x: 'A volcano is a rupture in the crust of a planet that allows hot lava, ash and gases to escape from below the surface.' }),
+    JSON.stringify({ t: 'Photosynthesis', x: 'Photosynthesis is the process plants use to turn light, water and carbon dioxide into sugar and oxygen.' })];
+  const gz = zlib.gzipSync(Buffer.from(lines.join('\n') + '\n'));
+  await L(page, () => window.__lumen.openSettings('wikipack'));
+  await page.setInputFiles('#wpFile', { name: 'lumen-wiki-pack.jsonl.gz', mimeType: 'application/gzip', buffer: gz });
+  await until(page, () => window.__lumen.WikiPack.has(), null, 20000);
+  await L(page, () => { window.__lumen.S.wikipack.mode = 'only'; document.getElementById('settings').close(); });
+  const m = await ask(page, 'What is a mitochondrion?');
+  assert(m.sources?.some(s => /offline copy/.test(s.site)), 'offline copy used: ' + JSON.stringify(m.sources));
+  eq(errors, [], 'errors');
+});
+test('delete all my data: everything is gone and Lumen starts as new', async () => {
+  const { page, errors } = await open();
+  await download(page);
+  await ask(page, 'hello');
+  await L(page, () => window.__lumen.openSettings('storage'));
+  await page.click('#set-storage button:has-text("Delete all my data")');
+  await page.click('#set-storage button:has-text("Click again")');
+  await page.waitForTimeout(2500);
+  await page.waitForFunction(() => window.__lumen && window.__lumen.Brain.state !== 'checking', null, { timeout: 20000 });
+  const r = await L(page, async () => ({ chats: window.__lumen.App.chats.length, caches: (await caches.keys()).length, cached: window.__lumen.Brain.cached['Qwen3.5-2B'] }));
+  eq(r, { chats: 0, caches: r.caches, cached: false }, 'clean start');
+  eq(errors, [], 'errors');
+});
+
+test('files: Excel and PowerPoint', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const py = `import zipfile,io,sys,base64
+def z(files):
+    b=io.BytesIO(); f=zipfile.ZipFile(b,'w',zipfile.ZIP_DEFLATED)
+    for n,c in files.items(): f.writestr(n,c)
+    f.close(); return base64.b64encode(b.getvalue()).decode()
+x=z({'xl/workbook.xml':'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheets><sheet name="Scores" sheetId="1"/></sheets></workbook>','xl/sharedStrings.xml':'<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>Name</t></si><si><t>PEACH</t></si></sst>','xl/worksheets/sheet1.xml':'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row><c t="s"><v>0</v></c><c><v>7</v></c></row><row><c t="s"><v>1</v></c><c><v>9</v></c></row></sheetData></worksheet>'})
+p=z({'ppt/slides/slide1.xml':'<p:sld xmlns:p="p" xmlns:a="a"><a:p><a:r><a:t>Slide about PLUM</a:t></a:r></a:p></p:sld>','ppt/notesSlides/notesSlide1.xml':'<p:notes xmlns:p="p" xmlns:a="a"><a:p><a:r><a:t>Say hello</a:t></a:r></a:p></p:notes>'})
+print(x); print(p)`;
+  const [x, pp] = execFileSync('python3', ['-c', py]).toString().trim().split('\n');
+  const { page, errors } = await open();
+  await page.setInputFiles('#fileInput', [{ name: 'scores.xlsx', mimeType: 'application/octet-stream', buffer: Buffer.from(x, 'base64') }, { name: 'talk.pptx', mimeType: 'application/octet-stream', buffer: Buffer.from(pp, 'base64') }]);
+  await until(page, () => window.__lumen.App.pending.length === 2 && window.__lumen.App.pending.every(d => !d.loading));
+  const t = await L(page, () => window.__lumen.App.pending.map(d => d.text));
+  assert(/Sheet: Scores/.test(t[0]) && /PEACH\t9/.test(t[0]), 'xlsx: ' + t[0]);
+  assert(/\[Slide 1\]\nSlide about PLUM\nSpeaker notes: Say hello/.test(t[1]), 'pptx: ' + t[1]);
+  eq(errors, [], 'errors');
+});
+test('study tools: answer a quiz, flip and save flashcards, review them, present slides', async () => {
+  const { page, errors } = await open();
+  await download(page);
+  await ask(page, '/quiz volcanoes');
+  await page.click('.qz-c:has-text("Right 0")');
+  await page.waitForSelector('.qz-c.ok');
+  await ask(page, '/cards volcanoes');
+  await page.click('.widget .fc');
+  await page.waitForSelector('.widget .fc.back');
+  await page.click('button:has-text("Save to daily review")');
+  await until(page, () => window.__lumen.Review.count() >= 3);
+  await page.fill('#input', '/review'); await page.press('#input', 'Enter');
+  await page.waitForSelector('#viewer .review .fc');
+  await page.click('#viewer .review .fc');
+  await page.click('#viewer button:has-text("Got it")');
+  await page.keyboard.press('Escape');
+  await ask(page, '/slides volcanoes');
+  await page.click('.widget button:has-text("Present")');
+  await page.waitForSelector('.present');
+  await page.keyboard.press('ArrowRight'); await page.keyboard.press('Escape');
+  await until(page, () => !document.querySelector('.present'));
+  eq(errors, [], 'errors');
+});
+test('essay feedback quotes the essay', async () => {
+  const { page, errors } = await open();
+  await download(page);
+  await page.fill('#input', '/essay'); await page.press('#input', 'Enter');
+  await page.waitForSelector('#essayText');
+  await page.fill('#essayText', 'Social media has changed how teenagers talk to each other every single day.\n\nMany studies show that phones at school can distract students from learning in class.');
+  await page.click('#viewer button:has-text("Get feedback")');
+  await until(page, () => !window.__lumen.App.run && window.__lumen.App.chats[0]?.messages[1]?.state === 'done', null, 20000);
+  const c = await L(page, () => window.__lumen.App.chats[0].messages[1].content);
+  assert(/Social media has changed how teenagers talk/.test(c), 'quotes the essay: ' + c.slice(0, 300));
+  eq(errors, [], 'errors');
+});
+test('code: Mermaid diagrams are drawn and JavaScript runs in the locked box', async () => {
+  const { page, errors } = await open();
+  await download(page);
+  await L(page, () => { window.__fakeLLM.answer = req => { const u = JSON.stringify(req.messages.slice(-1)); return /diagram please/.test(u) ? '```mermaid\ngraph TD\n  A[Start] --> B[End]\n```' : /run js/.test(u) ? '```js\nconsole.log(6 * 7)\n```' : null; }; });
+  await ask(page, 'diagram please');
+  await page.waitForSelector('.diagram svg', { timeout: 15000 });
+  await ask(page, 'run js');
+  await page.click('.msg-ai.last .cb-btn:has-text("Run")');
+  await page.waitForSelector('.msg-ai.last .run-log:has-text("42")', { timeout: 10000 });
+  eq(errors, [], 'errors');
+});
+test('long chats are squeezed into a summary', async () => {
+  const { page, errors } = await open();
+  await download(page);
+  await ask(page, 'hello');
+  await L(page, () => { const { App, S } = window.__lumen; const c = App.chats[0]; for (let i = 0; i < 8; i++) c.messages.push({ id: 'u' + i, role: 'user', content: 'Tell me more about cells. '.repeat(120), created: Date.now() }, { id: 'a' + i, role: 'assistant', content: 'Cells are the basic unit of life. '.repeat(150), state: 'done', created: Date.now() }); });
+  await ask(page, 'and one more question');
+  await until(page, () => !!window.__lumen.App.chats[0].summary, null, 15000);
+  eq(errors, [], 'errors');
+});
+test('test lab opens and runs the speed test', async () => {
+  const { page, errors } = await open();
+  await download(page);
+  await page.fill('#input', '/lab'); await page.press('#input', 'Enter');
+  await page.waitForSelector('#viewer .lab');
+  eq(errors, [], 'errors');
+});
+
 /* ---------- run ---------- */
 let failed = 0;
 for (const t of tests) {

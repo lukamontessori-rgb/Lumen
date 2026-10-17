@@ -911,6 +911,12 @@ hr.thin { border: 0; border-top: 1px solid var(--line); margin: 2px 0; width: 10
 #teach textarea:focus { border-color: var(--accent); }
 
 
+
+.voice-bar { display: flex; align-items: center; gap: 10px; margin: 10px 12px 0; padding: 7px 8px 7px 12px; border-radius: 12px; background: var(--accent-soft); color: var(--ink); font-size: 13.5px; }
+.vb-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); flex: none; }
+.vb-dot.listening { animation: pulse 1s ease-in-out infinite; }
+.vb-dot.speaking { animation: micpulse 1.2s ease-in-out infinite; }
+.vb-t { flex: 1; min-width: 0; }
 /* ---------- first-run setup ---------- */
 dialog.setup { border: 0; padding: 0; background: var(--bg); color: var(--ink); width: min(720px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); border-radius: 20px; box-shadow: var(--shadow-pop); overflow: auto; }
 dialog.setup::backdrop { background: color-mix(in srgb, var(--bg) 70%, rgba(20, 20, 19, .5)); backdrop-filter: blur(4px); }
@@ -999,6 +1005,7 @@ dialog.setup::backdrop { background: color-mix(in srgb, var(--bg) 70%, rgba(20, 
 .pv-files .att { width: 100%; }
 .pv-files .att .an { flex: 1; }
 
+.hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
 .proj-crumb .t { color: var(--muted); }
 .crumb-sep { color: var(--line-2); margin: 0 1px; }
 .quote-btn { position: fixed; z-index: 80; display: inline-flex; align-items: center; gap: 6px; border: 0; background: var(--ink); color: var(--bg); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; font-weight: 550; box-shadow: var(--shadow-pop); }
@@ -1076,6 +1083,7 @@ dialog.setup::backdrop { background: color-mix(in srgb, var(--bg) 70%, rgba(20, 
               <span class="c-tools" id="cTags"></span>
             </div>
             <div class="c-end">
+              <button type="button" class="mic" id="voiceBtn" hidden aria-pressed="false"></button>
               <button type="button" class="mic" id="micBtn" hidden aria-pressed="false"></button>
               <span class="meter" id="meter"><span class="mbar"><i></i></span><span class="mtxt">0%</span></span>
               <button type="button" class="model-chip" id="modelChip" aria-haspopup="menu" aria-expanded="false" aria-label="AI model"><span class="dot" id="modelDot"></span><span class="label" id="modelLabel">Checking…</span></button>
@@ -4683,7 +4691,7 @@ async function readFileText(file, onProgress) {
   const ext = (name.match(/\.([a-z0-9]+)$/i) || [])[1]?.toLowerCase() || '';
   let text = '', pages = 0, kind = ext || 'text';
   if (ext === 'pdf' || file.type === 'application/pdf') { const r = await readPdf(await file.arrayBuffer(), onProgress); text = r.text; pages = r.pages; kind = 'pdf';
-    if (text.replace(/\[Page \d+\]|\s/g, '').length < 40) throw new Error('This PDF has no selectable text (it may be a scan of paper).'); }
+    if (text.replace(/\[Page \d+\]|\s/g, '').length < 8) throw new Error('This PDF has no selectable text (it may be a scan of paper).'); }   // a scan gives no text at all; a short one-page PDF is fine
   else if (ext === 'docx') text = await readDocx(await file.arrayBuffer());
   else if (ext === 'pptx') text = await readPptx(await file.arrayBuffer());
   else if (ext === 'xlsx') text = await readXlsx(await file.arrayBuffer());
@@ -7647,6 +7655,7 @@ async function endRun(run, t0) {
   renderSidebar(); updateComposer(); updateMeter();
   announce(am.state === 'done' ? 'Lumen finished the answer.' : 'The answer was stopped.');
   if (am.state === 'done') { try { Usage.addAnswer(am.mode, am.ground); } catch {} scheduleSummary(chat); }
+  if (chat.id === App.currentId) { try { VoiceChat.answered(chat, am); } catch {} }   // a voice conversation reads the answer aloud, then listens again
 }
 
 /* Should the files attached to this chat be used for this question? */
@@ -8715,12 +8724,12 @@ function updateComposer() {
   els.send.innerHTML = busy ? icon('stop', 18) : icon('up', 18);
   els.send.setAttribute('aria-label', busy ? 'Stop' : 'Send');
   els.send.title = busy ? 'Stop (Esc)' : 'Send (' + (S.sendKey === 'mod' ? MOD + ' + Enter' : 'Enter') + ')';
-  Dictation.sync();
+  Dictation.sync(); updateVoiceBtn();
   const loading = App.pending.some(d => d.loading);
   els.send.disabled = !busy && ((!els.input.value.trim() && !App.pending.filter(d => !d.loading).length) || loading || Brain.state === 'unsupported');
   els.input.placeholder = Brain.state === 'unsupported' ? 'This browser can’t run the AI model'
     : App.pending.length ? 'What should Lumen do with the file? (or just send it to get a summary)'
-    : (current()?.messages.length ? 'Reply to Lumen…' : 'How can I help you learn today?  Type / for commands');
+    : (current()?.messages.length ? 'Reply to Lumen…' : App.view.startsWith('project:') ? 'Start a chat in this project…' : 'How can I help you today?');
 }
 /* The memory meter: how much of the AI's short-term memory the next message would use. */
 function updateMeter() {
@@ -8850,7 +8859,12 @@ const HELP_GROUPS = [
   ['Your files', 'Press + or drop a file into the chat: PDF, Word, PowerPoint, Excel, text or code. Paste a link and Lumen can read the page. Long files are read in parts.'],
   ['Study tools', 'Make a quiz, flashcards or a slide deck with /quiz, /cards and /slides. Slides can be presented, downloaded or printed.'],
   ['Keeps learning', 'Tell Lumen things like “I have an iPhone 17” or “Jimmy Donaldson is Mr. Beast” and it remembers them. It also saves what it looks up and reads a little of the internet each day. Type /learned to see it all.'],
-  ['Code', 'Code blocks have Download. HTML and SVG can be previewed, and JavaScript can be run, in a locked box. Mermaid diagrams are drawn for you.'],
+  ['Code', 'Code blocks have Download. HTML and SVG can be previewed, and JavaScript can be run, in a locked box. Mermaid diagrams are drawn for you. Press Open to see any of them in the side panel, where you can also edit and save it.'],
+  ['Projects', 'Projects (in the sidebar) keep related chats together. Each project has instructions and files that every chat in it uses.'],
+  ['Artifacts', 'Artifacts (in the sidebar) lists the web pages, diagrams, code, quizzes, flashcards and slides from all your chats.'],
+  ['Temporary chats', 'Press Temporary at the top of a new chat. It is not saved, and Lumen learns nothing from it.'],
+  ['Your style', 'The tools button in the message box sets the answer style, the role and the look-ups. Create your own style there too.'],
+  ['Change an answer', 'Under an answer: copy, read aloud, rate it, answer again, or the ⋯ menu for Shorter, Longer, More casual, More formal, Branch in a new chat and Open as a document. Select words in an answer to quote them in your reply.'],
 ];
 async function runSlash(sl, raw, opts = {}) {
   const { cmd, arg } = sl;
@@ -9288,11 +9302,11 @@ const Speech = {
     const c = current(), m = c?.messages.find(x => x.id === id), n = m && nodeFor(m);
     if (n) fillAssistant(n, m, c);
   },
-  speak(m) {
+  speak(m, onEnd) {
     if (!this.supported) { toast('This browser cannot read text aloud.'); return; }
     this.stop();
     const parts = speechChunks(plainText(m.content));
-    if (!parts.length) return;
+    if (!parts.length) { onEnd?.(); return; }
     this.id = m.id; this.refresh(m.id);
     const v = this.voice(), id = m.id;
     // Chrome stops long speech after a while, so the text is spoken in small pieces, one after another.
@@ -9301,7 +9315,7 @@ const Speech = {
         const u = new SpeechSynthesisUtterance(p);
         if (v) { u.voice = v; u.lang = v.lang; } else u.lang = 'en-GB';
         u.rate = Math.min(2, Math.max(0.6, +S.speechRate || 1));
-        u.onend = () => { if (i === parts.length - 1 && this.id === id) this.stop(); };
+        u.onend = () => { if (i === parts.length - 1 && this.id === id) { this.stop(); onEnd?.(); } };
         u.onerror = () => { if (this.id === id) this.stop(); };
         speechSynthesis.speak(u);
       });
@@ -9551,6 +9565,72 @@ const Dictation = (() => {
   return { supported: !!SR, canLocal, localState, install, turnOn, turnOff, enabled, start, stop, abort, toggle, sync, active: () => !!rec, isListening: () => listening, setIdle: ms => { idleMs = ms; } };
 })();
 
+
+/* ---------- voice conversation: you speak, Lumen answers out loud, then listens again (like ChatGPT's voice mode) ----------
+   It uses dictation (Settings → Voice) to hear you and the read-aloud voice to answer. What was heard appears in the message box
+   first, so you can see it; after a short pause it is sent by itself. The same privacy rules as dictation apply. */
+const VoiceChat = (() => {
+  let on = false, phase = '', quietT = 0, poll = 0;
+  const PAUSE = 1700;
+  const bar = h('div', { class: 'voice-bar', role: 'status' });
+  function paint() {
+    if (!on) { bar.remove(); updateVoiceBtn(); return; }
+    if (!bar.isConnected) els.composer.prepend(bar);
+    const words = { listening: 'Listening… speak, then pause', thinking: 'Lumen is thinking…', speaking: 'Lumen is speaking…' }[phase] || '';
+    bar.replaceChildren(h('span', { class: 'vb-dot ' + phase }), h('span', { class: 'vb-t', text: 'Voice conversation · ' + words }), h('button', { class: 'btn small', type: 'button', text: 'End', onclick: stop }));
+    updateVoiceBtn();
+  }
+  function listen() {
+    if (!on) return;
+    phase = 'listening'; paint();
+    Dictation.start().catch(() => {});
+  }
+  function onInput() {
+    if (!on || phase !== 'listening') return;
+    clearTimeout(quietT);
+    if (!els.input.value.trim()) return;
+    quietT = setTimeout(() => {
+      if (!on || phase !== 'listening' || !els.input.value.trim()) return;
+      Dictation.abort(); phase = 'thinking'; paint();
+      submitComposer();
+    }, PAUSE);
+  }
+  function answered(chat, m) {
+    if (!on) return;
+    if (m.state !== 'done' || !m.content) { if (m.state === 'stopped') stop(); else listen(); return; }
+    phase = 'speaking'; paint();
+    Speech.speak(m, () => { if (on) listen(); });
+  }
+  function start() {
+    if (!Dictation.enabled()) { toast('Turn on dictation first (Settings → Voice), then start a voice conversation.'); openSettings('dictate'); return; }
+    if (!Speech.supported) { toast('This browser cannot read answers aloud, so a voice conversation is not possible here.'); return; }
+    if (App.run) { toast('Wait for the answer to finish first.'); return; }
+    on = true; Dictation.setIdle(60000); listen();
+    // the microphone was closed with nothing heard (Esc, an error, a long silence): the conversation ends
+    poll = setInterval(() => { if (on && phase === 'listening' && !Dictation.active() && !els.input.value.trim()) stop(); }, 2000);
+  }
+  function stop() {
+    if (!on && !bar.isConnected) return;
+    on = false; phase = ''; clearTimeout(quietT); clearInterval(poll);
+    Dictation.abort(); Dictation.setIdle(25000); Speech.stop(); paint();
+  }
+  els.input.addEventListener('input', onInput);
+  return { start, stop, answered, active: () => on, toggle: () => (on ? stop() : start()) };
+})();
+function updateVoiceBtn() {
+  const b = document.getElementById('voiceBtn'); if (!b) return;
+  const can = Dictation.enabled() && Speech.supported && Brain.state !== 'unsupported';
+  b.hidden = !can;
+  if (!b.firstChild) b.innerHTML = icon('wave', 18);
+  let on = false; try { on = VoiceChat.active(); } catch {}   // not made yet while the page starts
+  b.classList.toggle('on', on);
+  b.setAttribute('aria-pressed', String(on));
+  b.setAttribute('aria-label', on ? 'End the voice conversation' : 'Voice conversation: talk with Lumen');
+  b.title = on ? 'End the voice conversation' : 'Voice conversation: speak, Lumen answers out loud, and listens again';
+  b.disabled = !on && (!!App.run || Lab.isBusy());
+}
+document.getElementById('voiceBtn').addEventListener('click', () => VoiceChat.toggle());
+
 /* ---------- model status (top chip, rail, welcome banner) ---------- */
 function modelStatus() {
   const m = Brain.model(S.model);
@@ -9671,7 +9751,8 @@ function renderBrainCard() {
         h('p', { text: saved && S.noAuto === m.key ? `The page stopped twice while ${m.name} was loading, so Lumen did not start it by itself. It may be too big for this computer: close other apps and tabs, then press Start, or choose a smaller model.`
           : saved ? 'Start it to begin. It runs on your graphics chip and works without internet.'
           : `${fmtMB(m.downloadMB)}, one time only, from Hugging Face (it sees your internet address). On a phone, use Wi-Fi. It is saved in this browser, then works offline.` })),
-        h('div', { class: 'row' }, h('button', { class: 'btn primary', type: 'button', html: `${icon(saved ? 'bolt' : 'download', 15)}<span>${saved ? 'Start' : 'Download'}</span>`, onclick: () => Brain.load(S.model).catch(() => {}) }), changeBtn));
+        h('div', { class: 'row' }, h('button', { class: 'btn primary', type: 'button', html: `${icon(saved ? 'bolt' : 'download', 15)}<span>${saved ? 'Start' : 'Download'}</span>`, onclick: () => Brain.load(S.model).catch(() => {}) }),
+          saved && S.noAuto === m.key && smallerModel(m) ? h('button', { class: 'btn', type: 'button', text: `Use ${smallerModel(m).name} instead`, onclick: () => chooseModel(smallerModel(m), { start: true }) }) : null, changeBtn));
     }
   }
 }
@@ -9694,6 +9775,8 @@ const CHIP_CATS = [
     ['A healthy recipe', 'Give me a simple, healthy dinner recipe with these ingredients: '], ['Solve a puzzle', 'Solve this puzzle step by step: a farmer has 17 sheep and all but 9 run away. How many are left?'] ] },
 ];
 let chipOpen = '';
+/* The next smaller model (for a computer that could not hold this one). */
+const smallerModel = m => { const order = ['Qwen3.5-0.8B', 'Qwen3.5-2B', 'Qwen3.5-4B', 'Qwen3.5-9B'], i = order.indexOf(m.key); return i > 0 ? MODELS.find(x => x.key === order[i - 1]) : null; };
 function renderChips() {
   els.chips.replaceChildren();
   const rk = getRole();
@@ -9759,7 +9842,7 @@ window.addEventListener('offline', () => { renderNet(); toast('You are offline. 
 /* ---------- About, Privacy, Terms and Credits; "Delete all my data"; AI labels; the helpline notice ----------
    The texts are written in plain words and only say what Lumen really does. When the app changes (a new look-up source,
    a new kind of saved data), these texts must change too. */
-const LEGAL = { who: 'Luka Zupanc', where: 'Slovenia', email: 'zupanc.luka@icloud.com', updated: '12 October 2026', repo: 'https://github.com/lukamontessori-rgb/Lumen' };
+const LEGAL = { who: 'Luka Zupanc', where: 'Slovenia', email: 'zupanc.luka@icloud.com', updated: '17 October 2026', repo: 'https://github.com/lukamontessori-rgb/Lumen' };
 const AI_LABEL = 'AI-generated by Lumen';
 const AI_FOOT_MD = '\n\n---\n_' + AI_LABEL + '. It can be wrong._\n';
 /* Text for the clipboard: a short label is added unless the user turned it off in Settings. */
@@ -9839,8 +9922,8 @@ const LEGAL_PAGES = {
     lh('Your chats stay on your device'),
     lp('The AI model runs inside your browser. Your messages and Lumen’s answers are not sent to me or to any AI company. I cannot see, read or get them back.'),
     lh('What is saved on your device'),
-    lul(['Your chats, in the browser’s database (IndexedDB).', 'Your settings, memory and learned habits (localStorage).', 'Usage numbers: how many answers and tokens, how many answers you marked good or wrong, how many were checked against sources, and how long Lumen was open and in use, one small line per day (localStorage). They hold no text from your chats.', 'Notes from look-ups, answers you marked as good, and files you added, as short saved text (IndexedDB). A correction you type after marking an answer wrong is saved with your memory.',
-      'The offline Wikipedia copy, only if you add one (IndexedDB).', 'While the AI works, a tiny note (which model, how long, whether the tab is in front) in this tab’s session storage. It is removed when the answer ends, and it is used only to explain a page restart. A short list of recent restarts is kept with your settings.', 'The AI model files and a copy of this page so it opens without internet (browser storage).']),
+    lul(['Your chats and your projects (their instructions and files), in the browser’s database (IndexedDB). Temporary chats are never saved.', 'Your settings, memory, learned habits, your own answer styles and your answers to the setup questions (which computer this is, its memory, what you use Lumen for) (localStorage).', 'Usage numbers: how many answers and tokens, how many answers you marked good or wrong, how many were checked against sources, and how long Lumen was open and in use, one small line per day (localStorage). They hold no text from your chats.', 'Notes from look-ups, answers you marked as good, and files you added, as short saved text (IndexedDB). A correction you type after marking an answer wrong is saved with your memory.',
+      'The offline Wikipedia copy, only if you add one (IndexedDB).', 'While the AI works, a tiny note (which model, how long, whether the tab is in front) in this tab’s session storage. It is removed when the answer ends, and it is used only to explain a page restart. A short list of recent restarts is kept with your settings.', 'The AI model files and a copy of this page so it opens without internet (browser storage: the Cache API, or the site’s private file storage if the browser damaged files in the Cache API).']),
     lp('Lumen needs this to work the way you asked, so there is no cookie banner. Lumen uses no tracking, no analytics, no ads and no accounts.'),
     h('div', { class: 'row' }, h('button', { class: 'btn', type: 'button', text: 'Delete all my data…', onclick: () => { closeLegal(); openSettings('storage'); } })),
     lp('You can delete everything at any time in Settings → Data and privacy → “Delete all my data”, or by clearing this site’s data in your browser.'),
@@ -9934,6 +10017,15 @@ function paletteActions() {
   const mk = (ic, label, run, extra = {}) => ({ ic, label, run, kind: 'Action', ...extra });
   const out = [
     mk('plus', 'New chat', newChat, { hint: `${MOD}${isMac ? '⇧' : '+Shift+'}O` }),
+    mk('ghost', 'New temporary chat', () => { newChat(); App.tempNext = true; renderTemp(); }, { desc: 'Not saved, and Lumen does not learn from it' }),
+    mk('folder', 'Projects', () => Projects.showAll()),
+    mk('folder', 'New project', () => Projects.create()),
+    mk('shapes', 'Artifacts: code, pages and study sets from your chats', () => { App.view = 'artifacts'; App.currentId = null; dropTemp(); paintView(); }),
+    mk('spark', 'Choose the AI model', () => setTimeout(showModelMenu, 50)),
+    mk('laptop', 'Set up Lumen for this computer', () => Setup.open()),
+    mk('pen', 'Create an answer style', () => editCustomStyle()),
+    mk('wave', 'Start a voice conversation', () => VoiceChat.start(), { desc: 'Speak, Lumen answers out loud, and listens again' }),
+    mk('check', 'Check the saved model files', () => openSettings('models')),
     mk('clip', 'Add a file', () => els.fileInput.click()),
     mk('quiz', 'Make a quiz', () => startCommand('/quiz ')),
     mk('cards', 'Make flashcards', () => startCommand('/cards ')),
@@ -9970,7 +10062,7 @@ const snippet = (text, q) => {
 function renderPalette() {
   const q = els.palInput.value.trim().toLowerCase();
   const rows = [];
-  const chats = [...App.chats].sort((a, b) => b.updated - a.updated);
+  const chats = App.chats.filter(c => !c.temp).sort((a, b) => b.updated - a.updated);
   if (!q) {
     for (const c of chats.slice(0, 5)) rows.push({ ic: 'text', label: c.title, kind: 'Chat', run: () => openChat(c.id) });
     rows.push(...paletteActions().slice(0, 9));
@@ -10073,8 +10165,9 @@ function renderSettingsModels() {
       if (App.run) { toast('Wait for the answer to finish first.'); return; }
       await Brain.remove(m.key); toast(`${m.name} was deleted from this browser.`); renderStorage();
     }));
+    const f = Setup.fit()[m.key];
     settingsModelsEl.append(h('label', { class: 'model-opt', for: 'model-' + m.key }, radio,
-      h('div', { class: 'nm' }, m.name, h('span', { class: 'tag ' + m.tagClass, text: m.tag })),
+      h('div', { class: 'nm' }, m.name, h('span', { class: 'tag ' + m.tagClass, text: m.tag }), f === 'best' ? h('span', { class: 'tag fit', text: 'Best for this computer' }) : f === 'big' ? h('span', { class: 'tag plain', text: 'May be too big here' }) : null),
       h('div', { class: 'desc', text: m.desc }), facts, act.childElementCount ? act : null));
   }
 }
@@ -10720,7 +10813,7 @@ function safeName(s) { return (s || 'chat').replace(/[^\w\- ]+/g, '').trim().sli
 /* A backup file of everything: chats, memory and settings (never the API key). */
 function exportAll() {
   const settings = { ...S, webKey: '' };
-  downloadFile(`lumen-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ lumen: 1, generator: 'Lumen (AI chatbot; its answers are AI-generated)', exported: new Date().toISOString(), settings, chats: App.chats, library: Learn.exportKB() }, null, 1), 'application/json');
+  downloadFile(`lumen-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ lumen: 1, generator: 'Lumen (AI chatbot; its answers are AI-generated)', exported: new Date().toISOString(), settings, chats: App.chats.filter(c => !c.temp), projects: Projects.list(), library: Learn.exportKB() }, (k, v) => (k.startsWith('_') ? undefined : v), 1), 'application/json');
 }
 async function importBackup(file) {
   let data;
@@ -10728,8 +10821,25 @@ async function importBackup(file) {
   const chats = Array.isArray(data) ? data : Array.isArray(data?.chats) ? data.chats : null;
   if (!chats) { toast('That file is not a Lumen backup.'); return; }
   let added = 0;
+  // projects first, so the chats find theirs
+  let projects = 0;
+  for (const p of Array.isArray(data?.projects) ? data.projects : []) {
+    if (!p || typeof p.id !== 'string' || typeof p.name !== 'string' || !p.name.trim()) continue;
+    const old = Projects.get(p.id);
+    if (old && (p.updated || 0) <= (old.updated || 0)) continue;
+    const clean = { id: p.id.slice(0, 40), name: p.name.trim().slice(0, 60), about: String(p.about || '').slice(0, 300), instructions: String(p.instructions || '').slice(0, 1500), created: Number.isFinite(p.created) ? p.created : Date.now(), updated: Number.isFinite(p.updated) ? p.updated : Date.now(),
+      docs: (Array.isArray(p.docs) ? p.docs : []).filter(d => d && typeof d.text === 'string' && typeof d.name === 'string').slice(0, MAX_FILES).map(d => ({ id: typeof d.id === 'string' ? d.id : uid(), name: d.name.slice(0, 120), kind: String(d.kind || 'txt').slice(0, 10), text: d.text.slice(0, DOC_LIMITS.chars), chars: Math.min(d.text.length, DOC_LIMITS.chars), pages: Number.isFinite(d.pages) ? d.pages : 0 })) };
+    if (old) Projects._set(Projects.list().filter(x => x !== old));
+    await Projects.save(clean); projects++;
+  }
+  // your own answer styles
+  if (Array.isArray(data?.settings?.styles)) {
+    for (const x of data.settings.styles) if (x && /^c_[a-z0-9]{2,16}$/.test(x.key) && typeof x.label === 'string' && typeof x.prompt === 'string' && !(S.styles || []).some(y => y.key === x.key) && (S.styles || []).length < 12)
+      S.styles = [...(S.styles || []), { key: x.key, label: x.label.slice(0, 30), desc: String(x.desc || '').slice(0, 80), prompt: x.prompt.slice(0, 600) }];
+    loadCustomStyles(S.styles); saveSettings();
+  }
   for (const c of chats) {
-    if (!c || typeof c.id !== 'string' || !Array.isArray(c.messages)) continue;
+    if (!c || typeof c.id !== 'string' || !Array.isArray(c.messages) || c.temp) continue;
     const old = App.chats.find(x => x.id === c.id);
     if (old) { if ((c.updated || 0) <= (old.updated || 0)) continue; App.chats = App.chats.filter(x => x !== old); }
     c.title = String(c.title || 'Chat').slice(0, 120); c.updated = c.updated || Date.now(); c.created = c.created || c.updated;
@@ -10751,7 +10861,7 @@ async function importBackup(file) {
   }
   if (data?.settings?.learn?.meant) Learn.importMeanings(data.settings.learn.meant);
   if (Array.isArray(data?.library)) await Learn.importKB(data.library);
-  renderSidebar(); toast(added ? `Restored ${added} chat${added === 1 ? '' : 's'}.` : 'Nothing new to restore.');
+  renderSidebar(); toast(added || projects ? `Restored ${added} chat${added === 1 ? '' : 's'}${projects ? ` and ${projects} project${projects === 1 ? '' : 's'}` : ''}.` : 'Nothing new to restore.');
 }
 
 /* ---------- global keys + nav ---------- */
@@ -10920,8 +11030,8 @@ function projectPage(p) {
         ] }], { below: true, right: true }) })),
         about,
         h('div', { class: 'pv-slot' }),
-        h('h3', { class: 'pv-h3', text: chats.length ? `Chats in this project (${chats.length})` : 'Start a chat in this project' }),
-        chats.length ? list : h('p', { class: 'hint', text: 'Type above to start. The chat uses this project’s instructions and files.' })),
+        chats.length ? h('h3', { class: 'pv-h3', text: `Chats in this project (${chats.length})` }) : null,
+        chats.length ? list : h('p', { class: 'hint', text: 'Type above to start a chat. Every chat in this project uses its instructions and files.' })),
       h('aside', { class: 'pv-side' },
         h('div', { class: 'pv-box' }, h('h3', { text: 'Instructions' }), h('p', { class: 'hint', text: 'Added to every message in this project. Saved when you click elsewhere.' }), instr),
         h('div', { class: 'pv-box' }, h('div', { class: 'pv-boxhead' }, h('h3', { text: 'Files' }), h('button', { class: 'btn small', type: 'button', html: `${icon('plus', 14)}<span>Add</span>`, onclick: () => pick.click() })), files, pick))));
@@ -10949,10 +11059,15 @@ els.navArtifacts.addEventListener('click', () => { App.view = 'artifacts'; App.c
 const Artifact = (() => {
   let cur = null;
   const previewable = lang => /^(html|svg|mermaid|markdown|md)$/.test(lang);
-  function close() { cur = null; els.panel.hidden = true; els.panel.replaceChildren(); els.app.classList.remove('panel-open'); }
+  let folded = false;
+  function close() {
+    cur = null; els.panel.hidden = true; els.panel.replaceChildren(); els.app.classList.remove('panel-open');
+    if (folded) { folded = false; els.app.classList.remove('rail-off'); }
+  }
   function open(a) {
     cur = { tab: previewable(a.lang) ? 'preview' : 'code', edit: false, ...a };
     els.panel.hidden = false; els.app.classList.add('panel-open'); closeNav();
+    if (!narrow() && window.innerWidth < 1400 && !els.app.classList.contains('rail-off')) { folded = true; els.app.classList.add('rail-off'); }
     paint();
   }
   function paint() {
@@ -11199,7 +11314,7 @@ const Setup = (() => {
       const m = Brain.model(st.model), saved = !!Brain.cached[m.key];
       title = 'Your model'; sub = `For your ${dev ? dev.label : 'computer'}${st.ram ? ` with ${RAM.find(r => r[0] === st.ram)?.[1]} of memory` : ''}, Lumen recommends ${Brain.model(p.best).name}. You can pick another one here or later in the message box.`;
       const list = h('div', { class: 'su-models', role: 'radiogroup', 'aria-label': 'AI model' });
-      for (const mm of MODELS) {
+      for (const mm of [...MODELS].sort((a, b) => a.downloadMB - b.downloadMB)) {
         const f = p.fit[mm.key];
         list.append(card(st.model === mm.key, mm.power ? 'layers' : 'spark', mm.name, `${mm.desc.split('. ')[0]}.`, () => { st.model = mm.key; paint(); },
           h('span', { class: 'su-meta' }, h('span', { class: 'tag ' + (f === 'best' ? 'fit' : f === 'big' ? 'lamp' : 'plain'), text: f === 'best' ? 'Best fit' : f === 'big' ? 'May be too big' : 'Fits' }), h('span', { text: Brain.cached[mm.key] ? 'Saved here' : fmtMB(mm.downloadMB) }))));

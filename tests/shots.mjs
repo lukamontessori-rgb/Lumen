@@ -47,6 +47,12 @@ const all = {
   home: {}, homeDark: { dark: true }, setup: { clean: true }, chat: { setup: chat }, chatDark: { dark: true, setup: chat },
   phone: { width: 390, height: 844 }, phoneChat: { width: 390, height: 844, setup: chat },
   settings: { setup: async p => { await p.evaluate(() => window.__lumen.openSettings('models')); } },
+  setupComputer: { clean: true, setup: async p => { await p.click('.su-next'); } },
+  setupMemory: { clean: true, setup: async p => { await p.click('.su-next'); await p.click('.su-card:has-text("MacBook Pro")'); await p.click('.su-next'); await p.click('.su-pill:has-text("16 GB")'); } },
+  setupReady: { clean: true, setup: async p => { await p.click('.su-next'); await p.click('.su-card:has-text("MacBook Pro")'); await p.click('.su-next'); await p.click('.su-pill:has-text("16 GB")'); await p.click('.su-card:has-text("A Pro chip")'); for (let i = 0; i < 4; i++) await p.click('.su-next'); } },
+  project: { setup: async p => { await p.evaluate(async () => { const { Projects } = window.__lumen; const pr = { id: 'p1', name: 'Biology exam', about: 'Revision for the June exam', instructions: 'Explain with simple examples and quiz me at the end.', docs: [{ id: 'd', name: 'cells.pdf', kind: 'pdf', text: 'x'.repeat(4000), chars: 4000, pages: 3 }], created: Date.now(), updated: Date.now() }; await Projects.save(pr); Projects.open('p1'); }); } },
+  panel: { setup: async p => { await chat(p); await p.evaluate(() => window.__lumen.Artifact.open({ title: 'Click counter', lang: 'html', code: '<!doctype html><title>Click counter</title><style>body{font:16px system-ui;display:grid;place-items:center;height:90vh}button{font-size:22px;padding:12px 22px;border-radius:12px}</style><button onclick="this.textContent=+this.textContent+1">0</button>' })); } },
+  artifacts: { setup: async p => { await chat(p); await p.click('#navArtifacts'); } },
 };
 for (const [k, v] of Object.entries(all)) if (!only.length || only.includes(k)) { try { await shot(k, v); console.log('saved', k); } catch (e) { console.log('failed', k, e.message); } }
 await browser.close(); await server.close();
