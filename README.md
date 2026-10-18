@@ -48,6 +48,22 @@ A web page cannot retrain the AI model itself (that needs a big computer and a l
 
 Every switch can be turned off, and "Forget what Lumen noticed" and "Empty the saved notes" erase what it learned. Facts about you (memory) can hold 60 items, and Lumen remembers up to 60 meanings you chose. The backup file includes your memory, your chosen meanings and saved notes.
 
+## What is new in version 20: safe on phones, and what only an on-device AI can do
+
+**iPhone fix.** On an iPhone 17 even the smallest model closed the page at the first question. The cause: Lumen asked for a 16K-token working memory by default (Settings → Memory size "Large"), while the models are made for 4K (Sparvelle needs about 1.6 GB at 4K), and iOS closes a page that asks for too much, without an error. Now a phone always uses the small memory size, shorter prompts and less thinking; a phone that never chose a model starts with Sparvelle; and if the page is closed while answering on a phone, Lumen steps down once more at once (shorter prompts) instead of waiting for a second crash. Tablets use the small size too unless you choose another one there.
+
+**The setup questions come up at once** the first time Lumen opens on a device, and never again by themselves on that device. Answers you gave before pressing Skip are kept. The "Learned today" line under the message box is gone (the page "What Lumen has learned" is still in Settings).
+
+**Lumen's own strengths: things a cloud AI cannot do.**
+- **Privacy receipt.** Under every answer, "On this device" shows exactly what left your device while it was made (for example: Wikipedia, "photosynthesis"), or "nothing sent". Settings → Data and privacy → **What left this device** lists every request Lumen made to another site. Lumen watches the browser's own fetch, so nothing can go out without a note.
+- **Offline mode.** One switch (the sliders button next to +, or Settings → Data and privacy) blocks every request to another site: no look-ups, no downloads, no online dictation. The AI keeps working. Good for private files, a diary, health or money questions, or a plane.
+- **Ask a folder.** + → **Add a folder**: notes, code or documents (up to 300 files). Lumen reads them on your device and answers with the file names. Nothing is uploaded.
+- **Private share links.** Chat menu → **Share as a private link**: the chat is compressed into the link itself, after the "#", which browsers never send to a server. The person who opens it gets a copy in their browser.
+- **Code that is run and fixed on your device.** When an answer has JavaScript that can run on its own, Lumen runs it in its locked box (no network, no page access). If it stops with an error, the AI gets one try to fix it, and the fix is kept only if it runs. A note under the answer says what happened. Settings → Answers → Run and fix code.
+- **Always free, no account, no limits**, and it keeps working without internet once the model is saved.
+
+**Also new.** **Research report** (+ → Research report, or `/research topic`): plans up to five searches, reads up to eight sources and writes a report with sections, sources and "what the sources do not say". **Better code**: code answers now use the Qwen3.5 model card's setting for precise coding (temperature 0.6, no presence penalty; before, a penalty for repeated words worked against code, which must repeat its names). **Faster**: a long answer is drawn on screen less often while it is written (with the engine in a background worker, the next words are fetched only when the page is free, so drawing too often slowed the AI down), and a saved model that does not start by itself starts as soon as you begin to type.
+
 ## What is new in version 19: model names, effort levels, faster follow-ups and Claude-like answers
 
 **The models have names.** Like the big assistants, the four models now have their own names, made up for Lumen (a web search found no product using them), from a small light to the sun:
@@ -99,7 +115,7 @@ They are only names: the models are the same Qwen3.5 models as before, unchanged
 
 **Fixed glitches** found by the new tests: "5 foots" (now "5 feet", "10 inches", "metres per second"); "what day is 25 December 2026?" answered with today's date; a short one-page PDF was refused as "a scan"; buttons on the download card could miss a click while the progress moved; backups now include projects and styles and never temporary chats.
 
-**Tests.** The folder `tests/` has 68 end-to-end tests (`node tests/run.mjs`, see `tests/README.md`). They drive the real page in Chromium with a pretend AI engine that reads and checks model files exactly the way WebLLM does, and pretend versions of Hugging Face and Wikipedia, so they need no graphics chip and no internet.
+**Tests.** The folder `tests/` has 78 end-to-end tests (`node tests/run.mjs`, see `tests/README.md`). They drive the real page in Chromium with a pretend AI engine that reads and checks model files exactly the way WebLLM does, and pretend versions of Hugging Face and Wikipedia, so they need no graphics chip and no internet.
 
 ## What is new in version 17: a restart guard and a stronger model
 
@@ -235,6 +251,7 @@ Never sent: your chats, files, memory, saved notes, name, rules or email address
 | I don't know which model fits my computer | Profile menu (bottom left) → **Set up Lumen for this computer**, or the model button in the message box → **Which model fits my computer?** |
 | The page restarted while the AI was thinking | Lumen now says why (tab put to sleep, background tab, or a crash from graphics memory). Close big tabs and apps, keep Lumen in front, and in Chrome add the site under Settings → Performance → "Always keep these sites active". Press Try again. |
 | A source shows an orange or red dot | Open Settings → Look-ups → Check connections. A source that fails three times is paused for a few minutes so it never slows an answer. |
+| The page closes or reloads on a phone | Fixed in version 20 (a phone now uses a small memory). Use Sparvelle, close other apps and tabs, and keep Lumen on the screen while it answers. If it still happens, Lumen uses shorter prompts by itself. |
 | Answers feel slow | Use Auto or a lower effort (Instant or Low), close other tabs, or choose Sparvelle (the smallest model). Follow-up questions in the same chat are faster than the first one. |
 
 ## Honest limits
@@ -266,6 +283,11 @@ Never sent: your chats, files, memory, saved notes, name, rules or email address
 - The help notice for self-harm uses a list of phrases. It is a safety net, not a safe system.
 - Version 18's new downloader was tested with the real WebLLM storage code, real browser storage and a pretend model server, including cut connections, empty saved files, a full disk, a server without byte ranges and a browser that damages files. The real Qwen3.5 9B files could not be downloaded where Lumen was built (Hugging Face could not be reached from there), so the first real download on your Mac is the final test. If a file still cannot be saved, Lumen now says exactly what happened instead of starting over.
 - The setup's model advice is a rule of thumb from the memory and chip you choose. A browser cannot see how much memory a computer has, and other open apps use memory too, so a model marked "fits" can still be too big on a busy computer. Lumen then says so and offers a smaller one.
+- Phones: the iPhone fix was made from WebLLM's memory numbers and reports about Safari's limit (about 1.5 GB when the phone is under memory pressure, more when it is not), and tested with a pretend engine and an iPhone browser signature, not on a real iPhone. Sparvelle is still close to the limit of a phone: close other apps and tabs. If the page still closes, Lumen steps down once more by itself.
+- The code check runs JavaScript only (not Python), and only code that can run on its own: code for a web page, Node.js modules or code that waits for input is not run. "Runs without errors" does not prove the code is right.
+- A private share link holds the whole chat, so a long chat makes a very long link that some apps cut. Anyone who has the link can read the chat.
+- Ask a folder needs Chrome or Edge for the folder picker; other browsers use their folder upload (also on your device). Up to 300 files and 600,000 characters are read; big files are skipped.
+- The privacy record shows requests the page makes. The AI engine's background worker only reads the saved model files; the browser's own services (for example online dictation, which Lumen asks about first, and the browser's safe-browsing checks) are outside Lumen's view.
 - The model names were checked with web searches (no product or app with these names came up), not in a trademark register. Before you earn money with Lumen or publish it in an app store, search the EU (TMview) and US registers.
 - Faster follow-ups were tested with a pretend engine that copies how WebLLM 0.2.85 decides to reuse the chat (the same comparison of messages). The real speed-up depends on your computer; the Usage page shows the speed.
 - The effort levels and what Auto learns change how long and how carefully the model works, not how smart it is. Ultra on Solvarra can take minutes for one answer.

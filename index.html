@@ -1065,7 +1065,6 @@ dialog.setup::backdrop { background: color-mix(in srgb, var(--bg) 70%, rgba(20, 
         <div class="chips" id="chips"></div>
         <div class="sugg" id="sugg" hidden></div>
         <button class="learned-btn" id="reviewBtn" type="button" hidden></button>
-        <button class="learned-btn" id="learnedBtn" type="button" hidden></button>
         <p class="ai-note" id="aiNote"></p>
         <nav class="legal-links" id="legalLinks2" aria-label="About Lumen"></nav>
       </div>
@@ -1291,6 +1290,7 @@ const FOLLOWUPS = [
 
 /* Short instructions that fit the kind of question. Only one is added per answer, so the prompt stays small. */
 const PLAYBOOKS = {
+  report: 'This is a research report built from the notes. Write: one title line starting with #; a summary of two or three sentences; then sections with ## headings that cover the main sides of the topic, each fact followed by the number of its note like [2]; then a section "## What the sources do not say" with the open questions. Take every fact, date, number and name from the notes; if the notes disagree, say so. No other sections.',
   math: 'This is a school math or science problem. Write the solution with exactly these bold labels, each starting a new line, in this order: **Given:** the numbers and facts. **Find:** what is asked. **Method:** the rule or formula you use. **Steps:** a numbered list with one calculation per step, written like 22 - 7 = 15. **Check:** put the answer back into the problem or estimate it. **Answer:** the final answer with its unit. Example for "Solve 3x + 7 = 22": **Given:** 3x + 7 = 22. **Find:** x. **Method:** undo the operations one by one. **Steps:** 1. 3x = 22 - 7 = 15. 2. x = 15 / 3 = 5. **Check:** 3 * 5 + 7 = 22, correct. **Answer:** x = 5.',
   code: 'This is a coding task. Give a one-line plan, then complete working code in one fenced code block with the language name, then a short explanation of how it works and how to run it. Keep the code simple and readable.',
   write: 'This is a writing task. Write the finished text first, ready to use, in the tone the user asked for. After it, add at most one short line offering a change.',
@@ -1322,6 +1322,7 @@ const ROLES = {
 /* Slash commands typed in the message box. */
 const SLASH = [
   { cmd: 'search', icon: 'globe', arg: 'question', desc: 'Look this up on the web and in Wikipedia first' },
+  { cmd: 'research', icon: 'layers', arg: 'topic', desc: 'Research a topic: up to 5 searches, up to 8 sources, a report with sources' },
   { cmd: 'instant', icon: 'bolt', arg: 'question', desc: 'Effort Instant: answer at once' },
   { cmd: 'low', icon: 'bolt', arg: 'question', desc: 'Effort Low: no thinking step' },
   { cmd: 'medium', icon: 'bulb', arg: 'question', desc: 'Effort Medium: think for a moment' },
@@ -1522,6 +1523,8 @@ const S = (() => {
   return s;
 })();
 if (!MODELS.some(m => m.key === S.model)) S.model = DEFAULTS.model;
+// a phone that has never chosen a model starts with the smallest one (the others need more memory than a phone tab gets)
+if ((() => { try { return !localStorage.getItem('lumen.settings'); } catch { return false; } })() && smallDevice() === 'phone') S.model = 'Qwen3.5-0.8B';
 S.mode = modeKeyOf(S.mode);
 S.styles = (Array.isArray(S.styles) ? S.styles : []).filter(x => x && /^c_[a-z0-9]{2,16}$/.test(x.key) && typeof x.label === 'string' && x.label.trim() && typeof x.prompt === 'string' && x.prompt.trim())
   .slice(0, 12).map(x => ({ key: x.key, label: x.label.trim().slice(0, 30), desc: String(x.desc || '').slice(0, 80), prompt: x.prompt.trim().slice(0, 600) }));
@@ -1530,12 +1533,15 @@ if (!STYLES[S.style]) S.style = 'normal';
 if (!WIKI_MODES[S.wiki]) S.wiki = 'auto';
 if (!CREATIVITY[S.creativity]) S.creativity = 'balanced';
 if (!['small', 'standard', 'large', 'max'].includes(S.ctxSize)) S.ctxSize = 'large';
+S.lite = [1, 2].includes(S.lite) ? S.lite : 0;
+S.offline = S.offline === true;
 if (!['ask', 'allow', 'never'].includes(S.reader)) S.reader = 'ask';
 if (!['small', 'normal', 'large'].includes(S.textSize)) S.textSize = 'normal';
 if (!['enter', 'mod'].includes(S.sendKey)) S.sendKey = 'enter';
 S.breakNudge = S.breakNudge === true;
 /* Source check (see 156-ground.js): look for dates, numbers and names that are in none of the sources, and write the answer again once without them. */
 S.check = S.check !== false;
+S.codeCheck = S.codeCheck !== false;
 S.autoStart = S.autoStart !== false;
 S.keepAwake = S.keepAwake !== false;   // keep the screen awake while the AI works (see 043-guard.js)
 S.strongPc = S.strongPc === true;      // the person confirmed that this computer can run the 9B model
@@ -1618,7 +1624,21 @@ const TEXT_SCALE = { small: 0.92, normal: 1, large: 1.14 };
 function applyTextSize() { document.documentElement.style.setProperty('--tscale', String(TEXT_SCALE[S.textSize] || 1)); }
 applyTextSize();
 /* The memory size that fits the chosen model, in tokens. */
-const ctxTarget = (m, size = S.ctxSize) => (m.ctxSizes[size] || m.ctxSizes.large);
+/* Phones and tablets: a browser tab there gets far less memory than on a computer, and iOS closes a page that asks for too much,
+   without an error (that is what happened on an iPhone 17 with the smallest model: it loaded, then the page closed at the first
+   question, when the engine set up its working memory). WebLLM sizes these models for a 4K-token memory (about 1.6 GB for
+   Sparvelle); Lumen's usual "Large" is 16K. So a phone always uses the small memory size and shorter prompts (planBudget), and a
+   tablet does too unless you choose another size there yourself. */
+function smallDevice() {
+  const c = S.computer?.device;
+  if (c === 'phone' || c === 'tablet') return c;
+  const ua = navigator.userAgent || '';
+  if (/iPhone|iPod/.test(ua) || (/Android/.test(ua) && /Mobile/.test(ua))) return 'phone';
+  if (/iPad/.test(ua) || /Android/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'tablet';
+  return '';
+}
+const phoneSafe = () => smallDevice() === 'phone' || (smallDevice() === 'tablet' && !S.ctxPicked);
+const ctxTarget = (m, size = S.ctxSize) => { const want = m.ctxSizes[size] || m.ctxSizes.large; return phoneSafe() ? Math.min(want, m.ctxSizes.small) : want; };
 
 /* ---------- chat storage (IndexedDB, with a memory fallback) ---------- */
 const Store = {
@@ -1739,7 +1759,7 @@ const Cache = {
 
 /* The places Lumen can look things up. "sends" says what leaves this computer. */
 const SOURCE_DEFS = [
-  { id: 'wikipedia', name: 'Wikipedia', what: 'Articles, plus Simple English Wikipedia, Wiktionary (word meanings) and Wikivoyage (travel).', sends: 'Your search words.', probe: 'https://en.wikipedia.org/w/api.php?action=query&meta=siteinfo&format=json&origin=*' },
+  { id: 'wikipedia', name: 'Wikipedia', what: 'Articles, plus Simple English Wikipedia, Wiktionary (word meanings) and Wikivoyage (travel).', sends: 'Your search words. One of the searches is usually your whole question, as you typed it (never the rest of the chat).', probe: 'https://en.wikipedia.org/w/api.php?action=query&meta=siteinfo&format=json&origin=*' },
   { id: 'events', name: 'Wikipedia news', what: 'The “Current events” page and the “In the news” box. This is how Lumen knows what happened this week.', sends: 'Nothing about your question.', probe: 'https://en.wikipedia.org/api/rest_v1/feed/featured/' },
   { id: 'wikidata', name: 'Wikidata', what: 'Exact facts: capitals, office holders, birth dates, populations, film directors.', sends: 'The name of the article it found.', probe: 'https://www.wikidata.org/w/api.php?action=wbsearchentities&search=Earth&language=en&limit=1&format=json&origin=*' },
   { id: 'gdelt', name: 'News headlines (GDELT)', what: 'Headlines from news sites around the world from the last few days.', sends: 'Your search words.', probe: 'https://api.gdeltproject.org/api/v2/doc/doc?query=science%20sourcelang:english&mode=artlist&maxrecords=1&format=json' },
@@ -1752,6 +1772,50 @@ const SOURCE_DEFS = [
   { id: 'web', name: 'Web search (your own key)', what: 'Searches the whole web for fresh answers. Off until you add a free key from Jina or Tavily.', sends: 'Your search words, to the company whose key you added.', probe: null, optional: true },
 ];
 const SOURCE_BY_ID = Object.fromEntries(SOURCE_DEFS.map(s => [s.id, s]));
+
+/* ---------- what left this device: every request the page makes to another site is written down ----------
+   Lumen wraps the browser's fetch once, at the start, so nothing goes out without a note: look-ups, the model download, reading
+   a web page. A note holds the site, the kind and the words that were in the address (the search words), never a chat. Offline
+   mode blocks every one of them (only the page's own files still load). The last 150 notes stay on this device (localStorage). */
+const Ledger = (() => {
+  const KEY = 'lumen.ledger', MAX = 150, listeners = new Set();
+  let list = [], timer = 0;
+  try { const v = JSON.parse(localStorage.getItem(KEY) || '[]'); if (Array.isArray(v)) list = v.filter(e => e && e.h && e.t).slice(-MAX); } catch {}
+  const save = () => { clearTimeout(timer); timer = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(list)); } catch {} }, 600); };
+  const MODEL_HOST = /(^|\.)(huggingface\.co|hf\.co)$|^raw\.githubusercontent\.com$/;
+  const PARAMS = ['search', 'srsearch', 'gsrsearch', 'q', 'query', 'titles', 'name', 'ids', 'from', 'to', 'symbols', 'latitude', 'longitude'];
+  function wordsOf(u, init) {
+    const out = [];
+    for (const k of PARAMS) { const v = u.searchParams.get(k); if (v && !out.includes(v)) out.push(v); }
+    if (/(^|\.)jina\.ai$/.test(u.hostname) && u.pathname.length > 1) { try { out.push(decodeURIComponent(u.pathname.slice(1))); } catch {} }
+    if (typeof init?.body === 'string') { try { const q = JSON.parse(init.body).query; if (typeof q === 'string') out.push(q); } catch {} }   // only the question part, never a key
+    return out.join(' · ').slice(0, 160);
+  }
+  const kindOf = u => (MODEL_HOST.test(u.hostname) ? 'model' : /(^|\.)jina\.ai$/.test(u.hostname) ? 'reader' : 'look-up');
+  function note(e) {
+    const last = list[list.length - 1];
+    // the model comes in many pieces: one note per download, not one per piece
+    if (e.k === 'model' && last && last.k === 'model' && last.h === e.h && !!last.b === !!e.b && e.t - last.t < 10 * 60e3) { last.n = (last.n || 1) + 1; last.t = e.t; }
+    else { list.push(e); if (list.length > MAX) list.splice(0, list.length - MAX); }
+    save(); for (const f of listeners) { try { f(e); } catch {} }
+  }
+  const orig = window.fetch.bind(window);
+  window.fetch = function (input, init) {
+    let u;
+    try { u = new URL(typeof input === 'string' || input instanceof URL ? String(input) : input.url, location.href); } catch { return orig(input, init); }
+    if (u.origin === location.origin || !/^https?:$/.test(u.protocol)) return orig(input, init);
+    const k = kindOf(u), e = { t: Date.now(), h: u.hostname, k, w: k === 'model' ? 'model files' : wordsOf(u, init) };
+    if (S.offline) { e.b = 1; note(e); return Promise.reject(Object.assign(new TypeError('Offline mode is on: Lumen sends nothing off this device.'), { offlineMode: true })); }
+    note(e);
+    return orig(input, init);
+  };
+  return {
+    all: () => list.slice(), since: t => list.filter(e => e.t >= t),
+    clear() { list = []; save(); },
+    on(fn) { listeners.add(fn); return () => listeners.delete(fn); },
+  };
+})();
+const LEDGER_KIND = { model: 'AI model files', reader: 'Web page reader', 'look-up': 'Look-up' };
 
 const Net = {
   health: {},   // id -> { fails, until, ok, last, ms, err }
@@ -2313,7 +2377,7 @@ const Brain = {
     } catch (e) {
       if (e?.message === 'cancelled' && token !== this.loadToken) throw e;   // a newer load has started; leave it alone
       if (e?.message === 'stopped' && token !== this.loadToken) throw e;   // the download was cancelled
-      console.error(e);
+      if (!e?.offlineMode && !S.offline) console.error(e);   // Offline mode stopping a download is not an error
       await this.teardown();
       this.state = 'error'; this.stalled = false;
       this.netFail = isNetworkError(e) && !e?.stalled;
@@ -2524,7 +2588,7 @@ const ModelFiles = (() => {
       try { return await fn(); }
       catch (e) {
         if (ctx.signal?.aborted) throw new Error('stopped');
-        if (e.fatal || e.storage || e.space || e.noRange || i >= (ctx.tries || T.tries)) throw e;
+        if (e.fatal || e.storage || e.space || e.noRange || e.offlineMode || S.offline || i >= (ctx.tries || T.tries)) throw e;
         ctx.onRetry?.(i, e);
         await waitOnline(ctx.signal);
         await sleep(Math.min(30e3, T.backoff * 2 ** (i - 1)), ctx.signal);
@@ -2687,6 +2751,7 @@ function isNetworkError(e) { return !!e?.network || /failed to fetch|networkerro
 const BROKEN_FILES_RE = /exceeds shard size|Tensor-cache record|shard size|checksum|corrupt|unexpected end of|Unexpected EOF/i;
 function friendlyError(e) {
   const msg = String(e?.message || e || 'Unknown error');
+  if (e?.offlineMode || (S.offline && (isNetworkError(e) || /Offline mode|fetch/i.test(msg)))) return 'Offline mode is on, so Lumen sends and downloads nothing. To download the model, turn Offline mode off (the sliders button next to +), then press “Try again”.';
   if (e?.hung) return 'The AI stopped responding for a long time (the graphics chip may have frozen), so Lumen stopped it and is loading the model again from the saved files. Press “Try again” in a moment. If it keeps happening, choose a smaller memory size or a smaller model in Settings.';
   if (e?.paused) return 'The model download was paused. Press Download (or Start) to carry on, then press “Try again”.';
   if (e?.space) return `There is not enough free storage for this model in this browser${e.need ? ` (it needs about ${fmtMB(e.need / 1e6)}${e.free != null ? `, and this site may use about ${fmtMB(e.free / 1e6)} more` : ''})` : ''}. Free some disk space, close private windows, delete a model you no longer use in Settings → Model, or pick a smaller model. Nothing was downloaded yet.`;
@@ -2741,7 +2806,11 @@ const Guard = {
     S.crashes = log.slice(-12);
     // Two foreground crashes with the same model in a day: use a lighter memory size.
     let stepped = '';
-    if (reason === 'crash' && log.filter(c => c.reason === 'crash' && c.model === o.model).length >= 2) {
+    if (reason === 'crash' && smallDevice() && o.phase !== 'loading') {
+      // a phone: at the first restart, use even shorter prompts (the memory size is already the smallest)
+      const was = phoneSafe() ? Math.max(1, S.lite || 0) : (S.lite || 0);
+      if (was < 2) { S.lite = was + 1; stepped = 'To be safer on this device, Lumen now uses shorter prompts and less thinking. If it happens again, choose Sparvelle, the smallest model, and close other apps.'; }
+    } else if (reason === 'crash' && log.filter(c => c.reason === 'crash' && c.model === o.model).length >= 2) {
       const order = ['max', 'large', 'standard', 'small'], i = order.indexOf(S.ctxSize);
       if (mdl && i >= 0 && i < order.length - 1) {
         S.ctxSize = order[i + 1];
@@ -4764,8 +4833,8 @@ function chunkDoc(text, size = 900) {
   const flush = () => { const t = buf.trim(); if (t) out.push({ i: out.length, text: t, loc: bufLoc }); buf = ''; };
   for (const raw of text.split('\n')) {
     const line = raw.trim();
-    const m = line.match(/^\[(Page|Slide|Sheet:?) ?([^\]]*)\]$/);
-    if (m) { flush(); loc = m[1].startsWith('Page') ? `p. ${m[2]}` : m[1].startsWith('Slide') ? `slide ${m[2]}` : `sheet ${m[2]}`; bufLoc = loc; continue; }
+    const m = line.match(/^\[(Page|Slide|Sheet:?|File:) ?([^\]]*)\]$/);
+    if (m) { flush(); loc = m[1].startsWith('Page') ? `p. ${m[2]}` : m[1].startsWith('Slide') ? `slide ${m[2]}` : m[1].startsWith('File') ? m[2] : `sheet ${m[2]}`; bufLoc = loc; continue; }
     if (!line) { if (buf.length > size * 0.55) flush(); continue; }
     const pieces = line.length > size * 1.4 ? line.split(/(?<=[.!?])\s+/) : [line];
     for (const piece of pieces) {
@@ -4927,7 +4996,7 @@ const els = {
   app: $('#app'), rail: $('#rail'), scrim: $('#scrim'), chatList: $('#chatList'), search: $('#searchChats'), main: $('#main'),
   newChat: $('#newChat'), openSettings: $('#openSettings'), railClose: $('#railClose'), menuBtn: $('#menuBtn'), chatTitle: $('#chatTitle'), moreBtn: $('#moreBtn'), filesBtn: $('#filesBtn'), paletteBtn: $('#paletteBtn'), netChip: $('#netChip'),
   modelChip: $('#modelChip'), modelDot: $('#modelDot'), modelLabel: $('#modelLabel'), railModel: $('#railModel'), railDot: $('#railDot'), railName: $('#railName'), railState: $('#railState'),
-  thread: $('#thread'), welcome: $('#welcome'), welcomeSlot: $('#welcomeSlot'), greet: $('#greetText'), brainCard: $('#brainCard'), chips: $('#chips'), learnedBtn: $('#learnedBtn'),
+  thread: $('#thread'), welcome: $('#welcome'), welcomeSlot: $('#welcomeSlot'), greet: $('#greetText'), brainCard: $('#brainCard'), chips: $('#chips'),
   messages: $('#messages'), column: $('#column'), jump: $('#jumpBtn'), dock: $('#dock'), dockSlot: $('#dockSlot'), fineprint: $('#fineprint'),
   composer: $('#composer'), input: $('#input'), modeBtn: $('#modeBtn'), toolsBtn: $('#toolsBtn'), cTags: $('#cTags'), meter: $('#meter'), send: $('#sendBtn'),
   tempBtn: $('#tempBtn'), tempBanner: $('#tempBanner'), sugg: $('#sugg'), pview: $('#pview'), panel: $('#panel'), navProjects: $('#navProjects'), navArtifacts: $('#navArtifacts'), railAvatar: $('#railAvatar'),
@@ -5099,10 +5168,17 @@ function renderPills() {
   const rk = getRole(), tags = [];
   if (rk) tags.push([ROLES[rk].icon, ROLES[rk].label, 'Remove the role', () => setRole('')]);
   if (S.style !== 'normal') tags.push(['text', STYLES[S.style].label, 'Back to the normal style', () => { S.style = 'normal'; saveSettings(); renderPills(); }]);
-  if (S.wiki === 'off') tags.push(['wifioff', 'No look-ups', 'Look things up again (Auto)', () => { S.wiki = 'auto'; saveSettings(); renderPills(); }]);
+  if (S.offline) tags.push(['lock', 'Offline mode', 'Turn offline mode off', () => setOffline(false)]);
+  else if (S.wiki === 'off') tags.push(['wifioff', 'No look-ups', 'Look things up again (Auto)', () => { S.wiki = 'auto'; saveSettings(); renderPills(); }]);
   else if (S.wiki === 'always') tags.push(['globe', 'Search always', 'Back to Auto', () => { S.wiki = 'auto'; saveSettings(); renderPills(); }]);
   els.cTags.replaceChildren(...tags.map(([ic, label, tip, off]) => h('span', { class: 'ctag' }, h('span', { html: icon(ic, 13) }), h('span', { text: label }), h('button', { type: 'button', 'aria-label': tip, title: tip, html: icon('x', 12), onclick: off }))));
   els.toolsBtn.classList.toggle('on', !!tags.length);
+}
+/* Offline mode: nothing leaves this device (see Ledger, which blocks every request to another site while it is on). */
+function setOffline(on) {
+  S.offline = !!on; saveSettings(); renderPills();
+  if (els.settings.open && typeof renderPrivacyLedger === 'function') renderPrivacyLedger();
+  toast(on ? 'Offline mode is on. Nothing leaves this device: no look-ups, no downloads, no online dictation. The AI still answers from what it knows and from your files.' : 'Offline mode is off. Lumen may look things up again.');
 }
 els.modeBtn.addEventListener('click', () => showMenu(els.modeBtn, 'Effort: how hard should Lumen work?', effortItems(), S.mode, v => { S.mode = v; saveSettings(); renderPills(); }));
 const getRole = () => { const c = current(); return (c ? c.role : App.pendingRole) || ''; };
@@ -5118,6 +5194,7 @@ els.toolsBtn.addEventListener('click', () => {
   const ck = on => (on ? icon('check', 16) : '');
   const rk = getRole();
   showActions(els.toolsBtn, 'Search, style and role', [
+    { title: 'Privacy', items: [{ icon: 'lock', label: 'Offline mode', desc: S.offline ? 'On: nothing leaves this device, not even search words' : 'Nothing leaves this device, not even search words. The AI still works.', tail: ck(S.offline), run: () => setOffline(!S.offline) }] },
     { title: 'Look things up', items: Object.entries(WIKI_MODES).map(([k, w]) => ({ icon: k === 'off' ? 'wifioff' : 'globe', label: w.label, desc: w.desc, tail: ck(S.wiki === k), run: () => { S.wiki = k; saveSettings(); renderPills(); } })) },
     { title: 'Answer style', items: [...Object.entries(STYLES).map(([k, st]) => ({ icon: 'text', label: st.label, desc: st.desc, tail: ck(S.style === k), run: () => { S.style = k; saveSettings(); renderPills(); } })),
       ...customStyles().map(cs => ({ icon: 'pen', label: cs.label, desc: cs.desc, tail: ck(S.style === cs.key), run: () => { S.style = cs.key; saveSettings(); renderPills(); } })),
@@ -5388,7 +5465,7 @@ function fillAssistant(node, m, chat) {
   // Notices above the answer: what was searched, and honest warnings when nothing reliable was found
   const lastMsg = chat.messages[chat.messages.length - 1] === m;
   const big = !live && lastMsg && !App.run ? Bigger.offer(m) : null;
-  const nk = [big ? 'big' + big.model.key + (big.cached ? 's' : '') : '', m.fixed ? m.fixed.to + '>' + m.fixed.from : '', m.alts ? m.alts.lead.title + (m.alts.picked ? '!' : '') + (lastMsg && !live ? '*' : '') : '', m.lookup || '', m.searchText || '', (m.failedSrc || []).join(','), m.mathCheck ? 'm' + m.mathCheck.checked + ':' + m.mathCheck.wrong.length : '', (m.repaired || []).join('+'), (m.solveMissing || []).join('+'), m.usedDocs ? m.usedDocs.files.length + ':' + Math.round(m.usedDocs.coverage * 100) + (m.usedDocs.whole ? 'w' : '') : '', m.playbook === 'debate' && !live ? 'debate' + (debateBalance(m.content)?.pct ?? '') : '', m.exCopy ? 'c' + m.exCopy : '', m.packCopy ? 'p' + m.packCopy : '', m.care ? 'care' : '', m.vote ? 'v' + m.vote.wins + '/' + m.vote.n + (m.vote.unsure ? 'u' : '') : '', m.ground ? 'g' + (m.ground.bad || []).join('/') + '>' + (m.ground.fixed || []).join('/') + (m.ground.tried ? 't' : '') : ''].join('|');
+  const nk = [big ? 'big' + big.model.key + (big.cached ? 's' : '') : '', m.fixed ? m.fixed.to + '>' + m.fixed.from : '', m.alts ? m.alts.lead.title + (m.alts.picked ? '!' : '') + (lastMsg && !live ? '*' : '') : '', m.lookup || '', m.searchText || '', (m.failedSrc || []).join(','), m.codeCheck ? 'cc' + Object.keys(m.codeCheck)[0] : '', m.mathCheck ? 'm' + m.mathCheck.checked + ':' + m.mathCheck.wrong.length : '', (m.repaired || []).join('+'), (m.solveMissing || []).join('+'), m.usedDocs ? m.usedDocs.files.length + ':' + Math.round(m.usedDocs.coverage * 100) + (m.usedDocs.whole ? 'w' : '') : '', m.playbook === 'debate' && !live ? 'debate' + (debateBalance(m.content)?.pct ?? '') : '', m.exCopy ? 'c' + m.exCopy : '', m.packCopy ? 'p' + m.packCopy : '', m.care ? 'care' : '', m.vote ? 'v' + m.vote.wins + '/' + m.vote.n + (m.vote.unsure ? 'u' : '') : '', m.ground ? 'g' + (m.ground.bad || []).join('/') + '>' + (m.ground.fixed || []).join('/') + (m.ground.tried ? 't' : '') : ''].join('|');
   if (r.nk !== nk) {
     r.nk = nk;
     r.notice.replaceChildren();
@@ -5407,6 +5484,10 @@ function fillAssistant(node, m, chat) {
     if (m.lookup === 'offline') r.notice.append(note('wifioff', true, h('b', { text: 'Couldn’t reach the internet. ' }), 'This answer comes from the AI’s own memory and may be out of date.'));
     else if (m.lookup) r.notice.append(note('alert', true, h('b', { text: 'Couldn’t verify this. ' }), 'I found nothing reliable in Wikipedia or the other sources, so this answer comes from the AI’s own memory and may be wrong. ',
       h('a', { href: 'https://duckduckgo.com/?q=' + encodeURIComponent(m.searchText || ''), target: '_blank', rel: 'noopener noreferrer', text: 'Search the web' }), '. If you know the answer, write “remember that …” and Lumen will keep it.'));
+    const cc = m.codeCheck;
+    if (cc?.ok) r.notice.append(note('check', false, 'Lumen ran the JavaScript in this answer in a locked box on this device: it runs without errors.'));
+    else if (cc?.fixed) r.notice.append(note('check', false, h('b', { text: 'Code checked and fixed. ' }), `The first version stopped with “${clip(cc.fixed, 140)}” when Lumen ran it on this device, so the AI corrected it. The corrected code runs without errors.`));
+    else if (cc?.bad) r.notice.append(note('alert', true, h('b', { text: 'This code stops with an error. ' }), `When Lumen ran it on this device it stopped with “${clip(cc.bad, 140)}”, and one try to fix it did not help. Ask Lumen to fix it, or check it yourself.`));
     if (m.mathCheck?.wrong?.length) r.notice.append(note('alert', true, h('b', { text: 'Check the arithmetic. ' }), 'The calculator got a different result for ' + m.mathCheck.wrong.slice(0, 3).map(w => `${w.expr} (the answer says ${w.said}, the calculator says ${w.real})`).join('; ') + '. The final answer may be wrong.'));
     else if (m.mathCheck?.checked) r.notice.append(note('check', false, `The calculator checked ${m.mathCheck.checked} calculation${m.mathCheck.checked > 1 ? 's' : ''} in the steps: all correct.`));
     if (m.ground?.fixed?.length) r.notice.append(note('check', false, h('b', { text: 'Checked against the sources. ' }), `Lumen found ${m.ground.fixed.length} detail${m.ground.fixed.length > 1 ? 's' : ''} that no source contained (${m.ground.fixed.slice(0, 4).join(', ')}) and wrote the answer again without ${m.ground.fixed.length > 1 ? 'them' : 'it'}.`));
@@ -5476,6 +5557,10 @@ function fillAssistant(node, m, chat) {
     if (m.stats?.secs) meta.append(h('span', { text: fmtSecs(m.stats.secs) }));
     if (m.stats?.tps) meta.append(h('span', { text: `${m.stats.tps.toFixed(0)} tok/s` }));
     if (meta.childElementCount) r.foot.append(meta);
+    if (m.state === 'done' && m.sent && !m.widget) {
+      const n = m.sent.filter(e => !e.b).length;
+      r.foot.append(h('button', { class: 'conf receipt', type: 'button', title: 'What left this device while this answer was made', html: `${icon('lock', 12)}<span>${n ? `On this device · ${n} look-up${n > 1 ? 's' : ''}` : 'On this device · nothing sent'}</span>`, onclick: () => showReceipt(m) }));
+    }
   }
   // Lumen's mark under the last finished answer, like Claude's
   let mk = node.querySelector(':scope > .endmark');
@@ -5490,8 +5575,10 @@ function paintLive() {
   rafPending = true;
   requestAnimationFrame(() => {
     rafPending = false;
-    const now = performance.now();
-    if (now - lastPaint < 50) { paintLive(); return; }
+    // Each paint draws the whole answer again, so a long answer is painted less often (and a phone less often still). With the
+    // engine in a worker, the next words are fetched only when the page is free, so a busy page also slows the AI down.
+    const now = performance.now(), len = App.run ? (App.run.am.content || '').length : 0;
+    if (now - lastPaint < Math.min(400, (smallDevice() ? 120 : 50) + Math.floor(len / 80))) { paintLive(); return; }
     lastPaint = now;
     const run = App.run; if (!run) return;
     if (run.chat.id !== App.currentId) return;
@@ -5680,7 +5767,10 @@ function buildMessages({ chat, userMsg, notes, exact, docs, budget, histTokens, 
   return { messages: [{ role: 'system', content: sys }, ...Examples.turns(exs), ...fixed, { role: 'user', content }], dropped, used, truncated, examples: exs.map(e => e.id) };
 }
 /* When the answer rests on notes or files, "balanced" becomes "precise": less randomness means fewer made-up details. A person who chose Creative keeps it. */
-function samplingFor(think, grounded = false) {
+function samplingFor(think, grounded = false, playbook = '') {
+  // Code: the Qwen3.5 model card's setting for precise coding (temperature 0.6, top_p 0.95, no presence penalty). The usual
+  // presence penalty of 1.5 punishes words that were already used, and code must repeat its names, brackets and keywords.
+  if (playbook === 'code') return { temperature: S.creativity === 'creative' ? 0.8 : 0.6, top_p: 0.95, presence_penalty: 0 };
   const c = CREATIVITY[grounded && (S.creativity || 'balanced') === 'balanced' ? 'precise' : S.creativity] || CREATIVITY.balanced;
   return { ...(think ? c.think : c.fast), presence_penalty: 1.5 };
 }
@@ -5752,17 +5842,20 @@ function debateBalance(content) {
 /* How much of the model's memory goes where. Smaller prompts mean quicker answers, so each mode has its own size. */
 function planBudget(mode, style, ctx, hasDocs, saver = false) {
   let think = mode.think ? mode.budget : 0, answer = mode.answer;
+  // a phone: shorter prompts and thinking, so the working memory stays small (S.lite goes up after a page restart on a phone)
+  const lite = phoneSafe() ? Math.max(1, S.lite || 0) : (S.lite || 0);
+  if (lite) { think = Math.min(think, lite >= 2 ? 200 : 450); answer = Math.min(answer, lite >= 2 ? 700 : 1000); }
   if (saver) { ctx = Math.min(ctx, 4096); answer = Math.min(answer, 500); }   // Battery saver: shorter answers, a smaller memory
   if (ctx < 8192) { think = Math.round(think * 0.5); answer = Math.min(answer, 1000); }
   if (style === 'short') answer = Math.min(answer, 450);
   const outMax = think + answer;
   const hardPrompt = Math.max(900, ctx - outMax - 300);
   const want = mode.promptTokens + (hasDocs ? Math.round(mode.docChars / 3.5) : 0);
-  const promptBudget = Math.max(900, Math.min(hardPrompt, want));
+  const promptBudget = Math.max(900, Math.min(hardPrompt, want, lite >= 2 ? 1100 : lite ? 1900 : Infinity));
   const roomChars = Math.floor(promptBudget * 3.5);
   const notesChars = Math.min(hasDocs ? Math.round(mode.notesChars * 0.55) : mode.notesChars, Math.floor(roomChars * 0.45));
   const docChars = hasDocs ? Math.min(mode.docChars, Math.floor(roomChars * 0.6)) : 0;
-  return { budget: think, answerMax: answer, outMax, promptBudget, replayMax: hardPrompt, notesChars, docChars, histTokens: Math.min(mode.histTokens, Math.floor(promptBudget * 0.4)) };
+  return { budget: think, answerMax: answer, outMax, promptBudget, replayMax: lite ? promptBudget : hardPrompt, notesChars, docChars, histTokens: Math.min(mode.histTokens, Math.floor(promptBudget * 0.4)) };
 }
 
 /* ---------- show-your-work solutions: all six parts must be there, and the arithmetic in the steps is checked by the calculator ---------- */
@@ -6928,6 +7021,7 @@ const Learn = (() => {
   async function runDaily({ manual = false } = {}) {
     if (running) return { busy: true };
     if (!manual && !(L().daily && due())) return { skipped: true };
+    if (S.offline) { if (manual) toast('Offline mode is on, so Lumen does not read the internet.'); return { offline: true }; }
     if (navigator.onLine === false) { if (manual) toast('You are offline, so Lumen cannot read the internet right now.'); return { offline: true }; }
     if (App.run && !manual) return { skipped: true };
     running = true; status = 'Reading the internet…'; notify();
@@ -7086,12 +7180,6 @@ const Learn = (() => {
     if (L().last) return `Last read ${agoText(L().last)}` + (t ? `, ${t.n} new note${t.n === 1 ? '' : 's'} today${t.r ? ` and ${t.r} refreshed` : ''}.` : '.');
     return status || 'Not read yet. Lumen reads once a day while this page is open.';
   }
-  function learnedLabel() {
-    const t = today(), c = counts(), auto = S.memory.filter(m => m.src === 'auto').length;
-    if (t?.n) return `Learned today: ${t.n} new note${t.n === 1 ? '' : 's'}`;
-    if (c.total || auto || interests(1).length) return 'What Lumen has learned';
-    return '';
-  }
   function showLearned() {
     openViewer('What Lumen has learned', () => {
       const box = h('div', { class: 'learned' });
@@ -7140,7 +7228,7 @@ const Learn = (() => {
     KB, on: fn => { listeners.add(fn); return () => listeners.delete(fn); }, notify, extract, classify, saveFact, undoFact, fromMessage, forgetNatural, promptParts, expand,
     noteTurn, noteStyle, interests, outboundInterests, likedStyles, styleHints, suggestions, kbFor, markUsed, forQuestion, saveLookups, saveLiked, forgetLiked, counts, exportKB, importKB,
     meaningFor, rememberMeaning, restoreMeaning, forgetMeaning, importMeanings, meanings, noteMiss, wishes, forgetWish,
-    runDaily, due, start, statusLine, learnedLabel, showLearned, forgetHabits, forgetLibrary, isRunning: () => running, today, pretty, STYLE_WORDS,
+    runDaily, due, start, statusLine, showLearned, forgetHabits, forgetLibrary, isRunning: () => running, today, pretty, STYLE_WORDS,
     ready: () => KB.load(),
   };
 })();
@@ -7710,6 +7798,20 @@ function openEssayDialog(prefill = '') {
   });
 }
 
+/* ---------- code check: JavaScript in an answer is run in the locked box on this device, and an error gets one repair ----------
+   Only code that can run on its own there: no page (document, window), no network, no Node modules, no input from a person.
+   A fix is kept only if the new code runs without errors; code that shows an error on purpose is left alone. */
+function checkableJs(content) {
+  const blocks = [...String(content || '').matchAll(/```(?:js|javascript|node|mjs)[^\n]*\n([\s\S]*?)```/gi)].map(m => m[1]);
+  if (!blocks.length) return null;
+  const code = blocks.sort((a, b) => b.length - a.length)[0];
+  if (code.trim().length < 20 || code.length > 20000) return null;
+  if (/\b(document|window|localStorage|sessionStorage|navigator|alert|prompt|confirm|fetch|XMLHttpRequest|require|process|__dirname|Deno|Bun|readline)\b|^\s*(?:import|export)\s/m.test(code)) return null;
+  if (/\/\/\s*\.\.\.|^\s*\.\.\.\s*$|your code here|\bTODO\b/im.test(code)) return null;   // only a piece of a program
+  return code;
+}
+const codeRepairMessage = err => `I ran the JavaScript in your answer and it stopped with this error:\n${clip(err, 600)}\n\nIf the code is meant to show this error, reply only with the word INTENDED. Otherwise find the cause and write your whole answer again with the corrected code. Keep everything that was right.`;
+
 /* ---------- Auto gets better with use: it learns which kinds of questions need more effort ----------
    Every answer where Auto chose the level is noted with its kind (math, code, facts, writing ...) and its level. A thumbs down,
    a detail that none of the sources contains, or tries that did not agree count as "not good enough"; a thumbs up counts as good.
@@ -7791,6 +7893,71 @@ async function ensureModel(run) {
     }
   } finally { Brain.listeners.delete(update); am.modelLoading = false; }
 }
+/* ---------- private share links: the whole chat travels inside the link itself ----------
+   The part of an address after "#" is never sent to any server (not even to this site), so a shared chat is not stored or seen
+   anywhere on the way. The chat is compressed into the link; the person who opens it gets a copy in their own browser.
+   Only the questions, the answers and their source links go in: no thinking, no notes, no files, no memory. */
+const ShareLink = {
+  http: u => /^https?:\/\//i.test(String(u || '')) && String(u).length < 2000,
+  b64(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000)); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); },
+  unb64(t) { const s = atob(t.replace(/-/g, '+').replace(/_/g, '/')); const u8 = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u8[i] = s.charCodeAt(i); return u8; },
+  async make(c) {
+    const msgs = c.messages.filter(m => (m.role === 'user' && m.content) || (m.role === 'assistant' && m.content && m.state === 'done'))
+      .map(m => m.role === 'user' ? ['u', m.content] : ['a', cleanAnswer(m.content), (m.sources || []).slice(0, 8).filter(x => this.http(x.url)).map(x => [x.title, x.url])]);
+    const bytes = new TextEncoder().encode(JSON.stringify({ v: 1, t: c.title, m: msgs }));
+    let body = bytes, z = false;
+    if (typeof CompressionStream === 'function') { try { body = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer()); z = true; } catch {} }
+    return `${location.origin}${location.pathname}#share=${z ? 'z' : 'p'}${this.b64(body)}`;
+  },
+  async read(hash) {
+    const m = /^#share=([zp])([A-Za-z0-9_-]+)$/.exec(hash || '');
+    if (!m || m[2].length > 4e6) return null;
+    let bytes = this.unb64(m[2]);
+    if (m[1] === 'z') bytes = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+    const d = JSON.parse(new TextDecoder().decode(bytes));
+    if (!d || d.v !== 1 || !Array.isArray(d.m)) return null;
+    const msgs = d.m.slice(0, 400).filter(x => Array.isArray(x) && (x[0] === 'u' || x[0] === 'a') && typeof x[1] === 'string').map(x => {
+      const base = { id: uid(), role: x[0] === 'u' ? 'user' : 'assistant', content: x[1].slice(0, 100000), created: Date.now() };
+      if (x[0] === 'a') Object.assign(base, { state: 'done', thinking: '', sources: (Array.isArray(x[2]) ? x[2] : []).slice(0, 8).filter(s => Array.isArray(s) && this.http(s[1])).map((s, i) => ({ n: i + 1, title: String(s[0] || '').slice(0, 200), url: s[1] })) });
+      return base;
+    });
+    return msgs.length ? { title: String(d.t || 'Shared chat').slice(0, 80), messages: msgs } : null;
+  },
+  async share(c) {
+    try {
+      const link = await this.make(c);
+      await navigator.clipboard.writeText(link);
+      toast(link.length > 60000 ? 'Link copied. It is very long, so some apps may cut it; for a long chat “Save as a file” is safer.' : 'Private link copied. The chat is inside the link itself: no server stores it, and anyone you give the link to can read it.', null, 8000);
+    } catch { toast('The link could not be made or copied in this browser.'); }
+  },
+  /* someone opened a shared link: offer to save the chat in this browser */
+  async receive() {
+    let got = null;
+    try { got = await this.read(location.hash); } catch {}
+    try { history.replaceState(null, '', location.pathname + location.search); } catch {}
+    if (!got) { toast('This shared link is damaged or incomplete, so nothing was opened.'); return; }
+    const r = await askDialog({ title: 'Open a shared chat?', text: `Someone shared the chat “${got.title}” with you (${got.messages.length} messages). It came inside the link itself, so no server stored it. Lumen will save a copy in this browser. Its answers were written by an AI; check them before you rely on them.`, ok: 'Open it' });
+    if (!r.ok) return;
+    const chat = { id: uid(), title: got.title, created: Date.now(), updated: Date.now(), pinned: false, shared: true, messages: got.messages };
+    App.chats.push(chat); App.currentId = chat.id; await saveChat(chat);
+    renderSidebar(); renderThread(); renderTitle();
+  },
+};
+
+/* The privacy receipt of one answer: where it was made and exactly what left the device for it. */
+function showReceipt(m) {
+  const mdl = modelByName(m.modelName);
+  openViewer('Privacy receipt', () => {
+    const sent = (m.sent || []).filter(e => !e.b), blocked = (m.sent || []).filter(e => e.b);
+    return h('div', { class: 'learned' },
+      h('p', { text: `This answer was written on your device by ${mdl ? fullModelName(mdl) : 'the AI model'}. The chat, your files, your memory and the answer stayed on this device, and no AI company saw them.` }),
+      h('h3', { text: sent.length ? 'What Lumen sent to look things up' : 'What Lumen sent' }),
+      sent.length ? h('p', { class: 'hint', text: 'Only these search words went out, to the sites named. One of them can be your question as you typed it.' }) : null,
+      sent.length ? h('ul', { class: 'lrn-list' }, ...sent.map(e => h('li', {}, h('b', { text: e.h }), e.w ? `: “${e.w}”` : ''))) : h('p', { class: 'hint', text: 'Nothing. No request left this device while this answer was made.' }),
+      blocked.length ? h('p', { class: 'hint', text: `Offline mode stopped ${blocked.length} request${blocked.length > 1 ? 's' : ''}.` }) : null,
+      h('p', { class: 'hint', text: 'Every request Lumen makes to another site is listed in Settings → Data and privacy → What left this device. Offline mode (the sliders button next to +) stops them all.' }));
+  });
+}
 /* Start a run: the assistant message that fills in while Lumen works, and the Stop handle. */
 function beginRun(chat, extra = {}) {
   const model = Brain.model(S.model);
@@ -7799,7 +7966,7 @@ function beginRun(chat, extra = {}) {
   if (chat._pendingFork) { am.fork = chat._pendingFork; chat._pendingFork = null; }   // this answer is a new version of an earlier one
   chat.messages.push(am);
   chat.updated = Date.now();
-  const run = { chat, am, stopped: false, ctl: new AbortController() };
+  const run = { chat, am, stopped: false, ctl: new AbortController(), tStart: Date.now() };
   run.stopped$ = new Promise(res => { run.onStop = res; });
   App.run = run;
   renderThread(); renderSidebar();
@@ -7812,6 +7979,10 @@ function beginRun(chat, extra = {}) {
 async function endRun(run, t0) {
   const { chat, am } = run;
   clearInterval(run.saveTimer);
+  // the privacy receipt: what went out while this answer was made (search words only; the question and answer never leave)
+  const seen = new Set();
+  am.sent = Ledger.since(run.tStart).filter(e => e.k !== 'model').map(e => ({ h: e.h, w: e.w, ...(e.b ? { b: 1 } : {}) }))
+    .filter(e => { const k = e.h + '|' + e.w; if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 20);
   if (am.tThink0 && !am.tThink1) am.tThink1 = Date.now();
   am.phase = ''; am.workText = ''; am.workProgress = null;
   if (am.state === 'stopped') am.content = cleanAnswer(am.content).trim();
@@ -7853,10 +8024,11 @@ async function runTurn(chat, userMsg) {
   // What does this question need? Files, exact tools, live data, Wikipedia?
   const docsOn = wantDocs(chat, userMsg, !!prevAi?.usedDocs);
   const local = localToolLines(question);
-  const toolHit = S.wiki === 'off' || ovr.search === 'off' || userMsg.noLookup ? false : liveToolPlan(question).length > 0;
+  const toolHit = S.offline || S.wiki === 'off' || ovr.search === 'off' || userMsg.noLookup ? false : liveToolPlan(question).length > 0;
   const exactOnly = local.lines.length > 0 && coreTerms(question).filter(w => !/^\d+$/.test(w)).length <= 3 && !REASON_RE.test(low);
   const toolOnly = toolHit && !REASON_RE.test(low);
   let modeKey = modeKeyOf(ovr.mode || S.mode), auto = false, autoWhy = '', effortKind = '', learned = false;
+  if (ovr.research && !['max', 'ultra'].includes(modeKey)) modeKey = 'max';   // a research report plans its searches and reads the most
   if (MODES[modeKey].power && !Brain.model(S.model).power) modeKey = 'max';   // Ultra needs Solvarra
   if (MODES[modeKey].auto) {
     const pk = pickMode(question, { hasDocs: docsOn, exactOnly, toolOnly });
@@ -7876,7 +8048,7 @@ async function runTurn(chat, userMsg) {
 
     // Decide on a look-up. It runs while the model starts, so it costs no extra time.
     const forceSearch = ovr.search === 'on';
-    const searchOff = S.wiki === 'off' || ovr.search === 'off' || userMsg.noLookup;
+    const searchOff = S.offline || S.wiki === 'off' || ovr.search === 'off' || userMsg.noLookup;
     const solving = ovr.playbook === 'math';   // /solve: a school problem needs the calculator and the layout, not Wikipedia
     const wikiOn = !searchOff && (forceSearch || toolHit || (!docsOn && (S.wiki === 'always' ||
       (!exactOnly && !solving && shouldLookUp(isFollowUp(question) && prevUser ? prevUser + ' ' + question : question)))));
@@ -7885,7 +8057,7 @@ async function runTurn(chat, userMsg) {
     const onStep = s => { am.lookStep = s; if (!am.modelLoading) setWork(am, s); };
     // If the first search finds nothing that matches, the model is asked to fix the spelling of the search words.
     const rewrite = Saver.active() ? undefined : async () => { await ensureModel(run); checkStop(); return planQueries(question, prevUser); };
-    const doGather = planned => gather({ question, prevQuestion: prevUser, plannedQueries: planned, maxArticles: mode.articles, charBudget: P.notesChars,
+    const doGather = planned => gather({ question, prevQuestion: prevUser, plannedQueries: planned, maxArticles: ovr.research ? 8 : mode.articles, charBudget: ovr.research ? Math.round(P.notesChars * 1.25) : P.notesChars,
       signal: run.ctl.signal, onStep, rewrite, simple: mode.level >= MODES.max.level || style === 'simple', wikiOn, forceWeb: forceSearch, learned: lrn, prefer: lrn?.prefer, core: Core.enabled() && !docsOn && !exactOnly && !userMsg.noLookup && ovr.search !== 'off' })
       .catch(e => (run.stopped ? null : { offline: true, sources: [], quality: 'offline', exact: local.lines, used: [], failed: [] }));
     let notesP = !mode.plan ? doGather(null) : null;
@@ -7895,7 +8067,7 @@ async function runTurn(chat, userMsg) {
     P = planBudget(mode, style, ctxNow(), docsOn, Saver.active());
     if (mode.plan && wikiOn && !Saver.active()) {
       setWork(am, 'Planning what to look up');
-      const planned = await planQueries(question, prevUser).catch(() => null);
+      const planned = await planQueries(question, prevUser, ovr.research ? 5 : 3).catch(() => null);
       checkStop();
       notesP = doGather(planned);
     } else if (mode.plan) notesP = doGather(null);
@@ -7936,7 +8108,7 @@ async function runTurn(chat, userMsg) {
     if (built.examples?.length) am.examples = built.examples;
     if (built.truncated) am.note = 'Your message was very long, so Lumen read only the first part';
     // Voting: Max or Ultra effort, a short checkable answer; the model is asked to end with "Final answer: X"
-    const voting = !!mode.tries && !Saver.active() && !docsOn && !notes?.exact?.length && !userMsg.study && !userMsg.essay && (ovr.vote || (S.vote.on && voteWorthy(question))) && !!built.messages.length;
+    const voting = !!mode.tries && !ovr.research && !Saver.active() && !docsOn && !notes?.exact?.length && !userMsg.study && !userMsg.essay && (ovr.vote || (S.vote.on && voteWorthy(question))) && !!built.messages.length;
     if (voting) { const lu = built.messages[built.messages.length - 1]; built.messages[built.messages.length - 1] = { ...lu, content: lu.content + VOTE_ASK }; }
     const grounded = !!(notes?.block || docs?.block || notes?.exact?.length);   // the answer rests on sources: steadier sampling
     setWork(am, mode.think ? 'Thinking it through' : 'Writing the answer', mode.think ? 0 : null);
@@ -7952,7 +8124,7 @@ async function runTurn(chat, userMsg) {
     const toAnswer = () => { kind = 'answer'; am.thinking = ''; am.tThink0 = 0; thinkTokens = 0; };
     if (built.replay) am.replay = true;
     const res = await Brain.generate({
-      messages: built.messages, think: mode.think, ...samplingFor(mode.think, grounded), max_tokens: P.outMax, tag: { chat: chat.id, am: am.id },
+      messages: built.messages, think: mode.think, ...samplingFor(mode.think, grounded, playbook), max_tokens: P.outMax, tag: { chat: chat.id, am: am.id },
       onDelta: (d, full) => {
         raw = full; tokens++;
         if (kind === null) {
@@ -8000,7 +8172,7 @@ async function runTurn(chat, userMsg) {
       const msgs2 = built.messages.slice(0, -1).concat([{ role: 'user', content: last.content + (notesSoFar ? `\n\n(Your reasoning notes so far:\n${notesSoFar}\n)` : '') + '\n\nNow write the final answer for me. Do not repeat the notes.' }]);
       let n2 = 0;
       const res2 = await Brain.generate({
-        messages: msgs2, think: false, ...samplingFor(false, grounded), max_tokens: P.answerMax,
+        messages: msgs2, think: false, ...samplingFor(false, grounded, playbook), max_tokens: P.answerMax,
         onDelta: (d, full) => {
           n2++;
           am.content = splitStream(full, false).answer;
@@ -8039,6 +8211,24 @@ async function runTurn(chat, userMsg) {
       am.solveMissing = solveParts(am.content);
     }
     if (playbook === 'math' && am.content) am.mathCheck = checkArithmetic(am.content);
+    // code: run it in the locked box; an error gets one repair, kept only if the new code runs (see checkableJs)
+    if (playbook === 'code' && S.codeCheck !== false && mode.check !== false && am.content && !run.stopped && !answerLoop && finish !== 'length') {
+      const code = checkableJs(am.content);
+      const r1 = code ? (setWork(am, 'Running the code to check it', null), await runJsQuiet(code)) : null;
+      if (r1?.ok) am.codeCheck = { ok: true };
+      else if (r1 && !r1.timeout && r1.errors.length && !run.stopped) {
+        const err = r1.errors[0];
+        setWork(am, 'The code stopped with an error: fixing it', null);
+        const fix = await Brain.generate({ messages: [...built.messages, { role: 'assistant', content: am.content }, { role: 'user', content: codeRepairMessage(err) }],
+          think: false, ...samplingFor(false, false, 'code'), max_tokens: P.answerMax }).catch(() => null);
+        const better = fix && fix.finish !== 'length' ? cleanAnswer(splitStream(fix.text, false).answer).trim() : '';
+        if (/^INTENDED\b/i.test(better)) am.codeCheck = { intended: err };
+        else {
+          const code2 = checkableJs(better), r2 = code2 && !run.stopped ? await runJsQuiet(code2) : null;
+          if (r2?.ok) { am.content = better; am.codeCheck = { fixed: err }; } else am.codeCheck = { bad: err };
+        }
+      }
+    }
     // source check: a date, number or name that is in none of the sources gets one repair try (see 156-ground.js)
     if (am.content && !run.stopped && !voting && playbook !== 'math' && (notes?.block || docs?.block)) {
       const pool = Ground.poolOf(built.messages);
@@ -8072,11 +8262,11 @@ async function runTurn(chat, userMsg) {
     await endRun(run, t0);
   }
 }
-async function planQueries(question, prev) {
-  const sys = 'You write Wikipedia search queries. Fix spelling mistakes in the question, but keep every name or title as the user wrote it, only corrected for spelling. Say "film" instead of "movie". Do not add names that are not in the question. Reply with one to three search queries, one per line, each two to five words. No numbering and no other text.';
+async function planQueries(question, prev, n = 3) {
+  const sys = `You write Wikipedia search queries. Fix spelling mistakes in the question, but keep every name or title as the user wrote it, only corrected for spelling. Say "film" instead of "movie". Do not add names that are not in the question.${n > 3 ? ' Cover different sides of the topic: what it is, how it works, its history, and its effects or debates.' : ''} Reply with one to ${n === 3 ? 'three' : n} search queries, one per line, each two to five words. No numbering and no other text.`;
   const user = (prev && isFollowUp(question) ? `Earlier question: ${prev}\n` : '') + `Question: ${question}`;
-  const r = await Brain.generate({ messages: [{ role: 'system', content: sys }, { role: 'user', content: user }], think: false, temperature: 0.2, top_p: 0.9, presence_penalty: 0, max_tokens: 48 });
-  return cleanAnswer(r.text).split('\n').map(s => s.replace(/^[\s\-*\d.)"'“]+|["'”\s]+$/g, '').trim()).filter(s => s && s.length < 70).slice(0, 3);
+  const r = await Brain.generate({ messages: [{ role: 'system', content: sys }, { role: 'user', content: user }], think: false, temperature: 0.2, top_p: 0.9, presence_penalty: 0, max_tokens: n > 3 ? 90 : 48 });
+  return cleanAnswer(r.text).split('\n').map(s => s.replace(/^[\s\-*\d.)"'“]+|["'”\s]+$/g, '').trim()).filter(s => s && s.length < 70).slice(0, n);
 }
 function stopRun() {
   const run = App.run; if (!run) return;
@@ -8109,7 +8299,7 @@ function addUserMessage(text, opts = {}) {
     msg.attach = [];
     for (const d of App.pending) {
       chat.docs.push(d);
-      msg.attach.push({ id: d.id, name: d.name, kind: d.kind, chars: d.chars, pages: d.pages });
+      msg.attach.push({ id: d.id, name: d.name, kind: d.kind, chars: d.chars, pages: d.pages, ...(d.files ? { files: d.files } : {}) });
     }
     App.pending = []; renderAttachments();
   }
@@ -8246,8 +8436,8 @@ function forkNav(chat, m) {
 
 /* ---------- adding files and web pages to a chat ---------- */
 const MAX_FILES = 12;
-const KIND_ICON = { pdf: 'file', docx: 'file', pptx: 'slides', xlsx: 'columns', web: 'globe', paste: 'text' };
-const kindLabel = d => d.kind === 'web' ? 'web page' : d.kind === 'paste' ? 'pasted text' : (d.kind || 'text').toUpperCase();
+const KIND_ICON = { pdf: 'file', docx: 'file', pptx: 'slides', xlsx: 'columns', web: 'globe', paste: 'text', folder: 'folder' };
+const kindLabel = d => d.kind === 'web' ? 'web page' : d.kind === 'paste' ? 'pasted text' : d.kind === 'folder' ? `folder, ${d.files || 0} file${d.files === 1 ? '' : 's'}` : (d.kind || 'text').toUpperCase();
 const docInfo = d => [d.pages ? `${d.pages} page${d.pages === 1 ? '' : 's'}` : '', `${Math.max(1, Math.round(d.chars / 5.7)).toLocaleString('en-US')} words`].filter(Boolean).join(', ');
 const chatDocChars = () => (current()?.docs || []).reduce((s, d) => s + d.chars, 0) + App.pending.reduce((s, d) => s + (d.chars || 0), 0);
 
@@ -8269,6 +8459,63 @@ async function addFiles(list) {
     }
     renderAttachments(); updateComposer();
   }
+}
+/* ---------- a whole folder: notes, code or documents, read on this device and never uploaded ----------
+   Chrome and Edge let Lumen read a folder you pick (showDirectoryPicker); other browsers use the folder upload of a file input,
+   which also stays on this device. Every file becomes one part of a single "folder" document, marked with its path, so answers
+   can say which file something is in. Hidden folders, node_modules, build output and very big files are skipped. */
+const FOLDER_SKIP = /(^|\/)(node_modules|\.git|\.svn|\.hg|dist|build|out|\.next|__pycache__|\.venv|venv|target|\.idea|\.vscode|coverage)(\/|$)/;
+const FOLDER_MAX_FILES = 300;
+async function addFolder() {
+  if (App.pending.length + (current()?.docs?.length || 0) >= MAX_FILES) { toast(`A chat can hold up to ${MAX_FILES} files. Remove one first.`); return; }
+  if (window.showDirectoryPicker) {
+    let dir;
+    try { dir = await window.showDirectoryPicker({ mode: 'read' }); } catch { return; }   // cancelled
+    const files = [];
+    const walk = async (d, path, depth) => {
+      for await (const [name, hd] of d.entries()) {
+        if (files.length >= FOLDER_MAX_FILES * 2) return;
+        const p = path + name;
+        if (name.startsWith('.') || FOLDER_SKIP.test(p)) continue;
+        if (hd.kind === 'directory') { if (depth < 8) await walk(hd, p + '/', depth + 1); }
+        else files.push({ path: p, get: () => hd.getFile() });
+      }
+    };
+    await walk(dir, '', 0);
+    return readFolder(dir.name, files);
+  }
+  const inp = h('input', { type: 'file', multiple: true, hidden: true });
+  inp.webkitdirectory = true;
+  inp.addEventListener('change', () => {
+    const list = [...inp.files], root = (list[0]?.webkitRelativePath || '').split('/')[0] || 'folder';
+    readFolder(root, list.map(f => ({ path: (f.webkitRelativePath || f.name).split('/').slice(1).join('/') || f.name, get: async () => f })).filter(x => !x.path.split('/').some(seg => seg.startsWith('.')) && !FOLDER_SKIP.test(x.path)));
+    inp.remove();
+  });
+  document.body.append(inp); inp.click();
+}
+async function readFolder(name, files) {
+  const want = files.filter(x => TEXT_EXT.test(x.path) || /\.(pdf|docx|pptx|xlsx)$/i.test(x.path)).sort((a, b) => a.path.localeCompare(b.path)).slice(0, FOLDER_MAX_FILES);
+  if (!want.length) { toast('Lumen found no files it can read in that folder (text, Markdown, code, PDF, Word, PowerPoint or Excel).'); return; }
+  const slot = { id: uid(), name: name + '/', loading: true, progress: 0, kind: 'folder' };
+  App.pending.push(slot); renderAttachments();
+  const parts = []; let chars = 0, read = 0, skipped = 0;
+  for (const [i, x] of want.entries()) {
+    slot.progress = i / want.length; if (i % 5 === 0) renderAttachments();
+    try {
+      const f = await x.get();
+      if (f.size > 5 * 1048576) { skipped++; continue; }
+      const d = await readFileText(f);
+      const room = DOC_LIMITS.chars - chars - 200;
+      if (room < 200) { skipped += want.length - i; break; }
+      const t = d.text.slice(0, room);
+      parts.push(`[File: ${x.path}]\n${t}`); chars += t.length + x.path.length + 10; read++;
+    } catch { skipped++; }
+  }
+  if (!read) { App.pending = App.pending.filter(x => x !== slot); renderAttachments(); toast('Lumen could not read any file in that folder.'); return; }
+  const text = parts.join('\n\n');
+  Object.assign(slot, { name: name + '/', kind: 'folder', text, chars: text.length, pages: 0, files: read, loading: false, added: Date.now() });
+  renderAttachments(); updateComposer();
+  toast(`Read ${read} file${read === 1 ? '' : 's'} from “${clip(name, 30)}” on this device${skipped ? ` (${skipped} skipped: too big, unreadable or over the limit)` : ''}. Nothing was uploaded.`);
 }
 function addPendingText(name, text, kind) {
   const t = text.replace(/\r\n?/g, '\n').trim().slice(0, DOC_LIMITS.chars);
@@ -8917,7 +9164,13 @@ function updateMeter() {
   const words = Math.round(ctx * 0.6 * 0.75 / 500) * 500;
   els.meter.title = `Lumen can hold about ${words.toLocaleString('en-US')} words of this chat in mind at once. ` + (c?.summary ? 'Older messages were squeezed into a short summary so the important parts are not lost. ' : 'When this fills up, older messages are squeezed into a short summary. ') + 'Start a new chat for a new topic.';
 }
-els.input.addEventListener('input', () => { autoGrow(); updateComposer(); updateMeter(); updateSlash(); });
+els.input.addEventListener('input', () => { autoGrow(); updateComposer(); updateMeter(); updateSlash(); warmOnTyping(); });
+/* Starting a saved model takes seconds. If it does not start by itself (Settings), it starts when you begin to type, so it is ready
+   or nearly ready when you press Send. Only a model that is already saved (nothing is downloaded without asking). */
+function warmOnTyping() {
+  if (Brain.state !== 'idle' || !Brain.cached[S.model] || S.noAuto === S.model || App.run || !els.input.value.trim() || /^\//.test(els.input.value)) return;
+  Brain.load(S.model).catch(() => {});
+}
 els.input.addEventListener('keydown', e => {
   if (handleSlashKey(e)) return;
   if (e.key === 'Enter' && !e.isComposing) {
@@ -8934,6 +9187,7 @@ els.plusBtn.addEventListener('click', () => {
   showActions(els.plusBtn, 'Add or make', [
     { title: 'Add to this chat', items: [
       { icon: 'clip', label: 'Add a file', desc: 'PDF, Word, PowerPoint, Excel, text or code', run: () => els.fileInput.click() },
+      { icon: 'folder', label: 'Add a folder', desc: 'Notes, code or documents. Read on this device, never uploaded', run: () => addFolder() },
       { icon: 'link', label: 'Add a web page', desc: 'Paste a link and Lumen reads the page', hidden: S.reader === 'never', run: async () => {
         const r = await askDialog({ title: 'Add a web page', text: 'Paste the address of the page.', input: true, placeholder: 'https://…', ok: 'Add' });
         if (r.ok && r.value) addLink(r.value);
@@ -8943,6 +9197,7 @@ els.plusBtn.addEventListener('click', () => {
       { icon: 'quiz', label: 'Quiz', desc: 'Five questions with answers and explanations', run: () => startCommand('/quiz ') },
       { icon: 'cards', label: 'Flashcards', desc: 'Flip cards you can practice with', run: () => startCommand('/cards ') },
       { icon: 'slides', label: 'Slide deck', desc: 'Present it, download it, or print it', run: () => startCommand('/slides ') },
+      { icon: 'layers', label: 'Research report', desc: 'Up to 5 searches and 8 sources, written up with sources', run: () => startCommand('/research ') },
     ] },
     { title: 'Start from a template', items: TEMPLATES.map(t => ({ icon: t.icon, label: t.label, run: () => startCommand(t.text) })) },
   ]);
@@ -9066,6 +9321,7 @@ async function runSlash(sl, raw, opts = {}) {
       return true;
     }
     case 'search': if (!arg) return needArg('your question'); await maybeReadLinks(arg); await send(arg, { ovr: { search: 'on' }, cmd }); return true;
+    case 'research': if (!arg) return needArg('a topic, like /research how do vaccines work'); if (S.offline) { toast('Research needs look-ups, and Offline mode is on.'); return true; } await send(arg, { ovr: { search: 'on', research: true, playbook: 'report' }, cmd }); return true;
     case 'ultra': if (!Brain.model(S.model).power) { toast('Ultra needs Solvarra (Qwen3.5 9B). Choose it in the model picker.'); return true; } if (!arg) return needArg('your question'); await send(arg, { ovr: { mode: 'ultra' }, cmd }); return true;
     case 'instant': case 'low': case 'medium': case 'high': case 'xhigh': case 'max':
     case 'deep': case 'fast': case 'think': if (!arg) return needArg('your question'); await send(arg, { ovr: { mode: modeKeyOf(cmd) }, cmd }); return true;
@@ -9390,6 +9646,43 @@ function decorateCode(acts, box, code, lang, final) {
   acts.append(mk('Download', 'download', () => downloadFile(`lumen-code.${ext}`, text, 'text/plain'), 'Save as a file'));
 }
 
+/* The locked box: a Worker inside a sandboxed frame with no network (the page's rules allow nothing but its own script).
+   It can only send text back to Lumen. It stops the code after `ms` milliseconds. */
+function runnerDoc(id, code, ms) {
+  const safe = s => JSON.stringify(s).replace(/</g, '\\u003c').replace(new RegExp('\u2028', 'g'), '\\u2028').replace(new RegExp('\u2029', 'g'), '\\u2029');
+  const boot = 'var __p=function(t,x){postMessage({type:t,text:x})};'
+    + 'var __f=function(a){return Array.prototype.map.call(a,function(v){if(typeof v==="string")return v;try{return typeof v==="object"?JSON.stringify(v,null,1):String(v)}catch(e){return String(v)}}).join(" ")};'
+    + 'console.log=console.info=console.debug=function(){__p("log",__f(arguments))};console.warn=function(){__p("warn",__f(arguments))};console.error=function(){__p("cerr",__f(arguments))};'
+    + '(async function(){\n' + code + '\n})().then(function(v){if(v!==undefined)__p("log","→ "+__f([v]));__p("done","")},function(e){__p("error",String(e&&e.stack||e).split("\\n").slice(0,4).join("\\n"));__p("done","")});';
+  return `<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; worker-src blob:; child-src blob:">
+<script>(function(){var id=${safe(id)};function send(t,x){parent.postMessage({lumenRun:id,type:t,text:x},'*')}
+var w;try{w=new Worker(URL.createObjectURL(new Blob([${safe(boot)}],{type:'text/javascript'})))}catch(e){send('error','This browser blocked the code runner.');send('done');return}
+var t=setTimeout(function(){w.terminate();send('timeout','Stopped: the code ran for more than ${Math.round(ms / 1000)} seconds.');send('done')},${ms});
+w.onmessage=function(e){if(e.data.type==='done'){clearTimeout(t);w.terminate()}send(e.data.type,e.data.text)};
+w.onerror=function(e){clearTimeout(t);send('error',e.message||'Error');send('done');w.terminate();e.preventDefault&&e.preventDefault()};
+})();<\/script>`;
+}
+/* Runs code in the locked box without showing anything. Resolves to { ok, errors, logs, timeout }. */
+function runJsQuiet(code, ms = 3000) {
+  return new Promise(resolve => {
+    const id = uid(), logs = [], errors = [];
+    let timeout = false;
+    const frame = h('iframe', { sandbox: 'allow-scripts', style: 'display:none', title: 'Code check', 'aria-hidden': 'true' });
+    const end = () => { clearTimeout(guard); window.removeEventListener('message', onMsg); frame.remove(); resolve({ ok: !errors.length && !timeout, errors, logs, timeout }); };
+    const onMsg = e => {
+      if (e.source !== frame.contentWindow || !e.data || e.data.lumenRun !== id) return;
+      const { type, text } = e.data;
+      if (type === 'done') return end();
+      if (type === 'timeout') timeout = true;
+      else if (type === 'error') errors.push(String(text || 'Error').slice(0, 400));
+      else if (logs.length < 20) logs.push(String(text ?? '').slice(0, 300));
+    };
+    const guard = setTimeout(() => { timeout = true; end(); }, ms + 2000);   // a frame that never answers
+    window.addEventListener('message', onMsg);
+    frame.srcdoc = runnerDoc(id, code, ms);
+    document.body.append(frame);
+  });
+}
 /* JavaScript runs inside a Worker that lives inside a sandboxed frame. The frame can only talk back to Lumen with text. */
 function runJs(code) {
   const id = uid();
@@ -9397,9 +9690,10 @@ function runJs(code) {
   const log = h('pre', { class: 'run-log', 'aria-live': 'polite' });
   const frame = h('iframe', { sandbox: 'allow-scripts', style: 'display:none', title: 'Code runner', 'aria-hidden': 'true' });
   out.append(h('div', { class: 'run-h', text: 'Output' }), log, frame);
-  let lines = 0, chars = 0, done = false;
+  let lines = 0, chars = 0;
   const add = (type, text) => {
-    if (type === 'done') { done = true; if (!lines) add('muted', '(finished, nothing was printed)'); return; }
+    if (type === 'timeout' || type === 'cerr') type = 'error';
+    if (type === 'done') { if (!lines) add('muted', '(finished, nothing was printed)'); return; }
     if (chars > 6000 || lines > 80) return;
     chars += (text || '').length; lines++;
     log.append(h('div', { class: 'l ' + type, text: String(text ?? '').slice(0, 2000) }));
@@ -9411,18 +9705,7 @@ function runJs(code) {
   };
   window.addEventListener('message', onMsg);
   out._stop = () => { window.removeEventListener('message', onMsg); frame.remove(); };
-    const safe = s => JSON.stringify(s).replace(/</g, '\\u003c').replace(new RegExp('\u2028', 'g'), '\\u2028').replace(new RegExp('\u2029', 'g'), '\\u2029');
-  const boot = 'var __p=function(t,x){postMessage({type:t,text:x})};'
-    + 'var __f=function(a){return Array.prototype.map.call(a,function(v){if(typeof v==="string")return v;try{return typeof v==="object"?JSON.stringify(v,null,1):String(v)}catch(e){return String(v)}}).join(" ")};'
-    + 'console.log=console.info=console.debug=function(){__p("log",__f(arguments))};console.warn=function(){__p("warn",__f(arguments))};console.error=function(){__p("error",__f(arguments))};'
-    + '(async function(){\n' + code + '\n})().then(function(v){if(v!==undefined)__p("log","→ "+__f([v]));__p("done","")},function(e){__p("error",String(e&&e.stack||e).split("\\n").slice(0,4).join("\\n"));__p("done","")});';
-  frame.srcdoc = `<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; worker-src blob:; child-src blob:">
-<script>(function(){var id=${safe(id)};function send(t,x){parent.postMessage({lumenRun:id,type:t,text:x},'*')}
-var w;try{w=new Worker(URL.createObjectURL(new Blob([${safe(boot)}],{type:'text/javascript'})))}catch(e){send('error','This browser blocked the code runner.');send('done');return}
-var t=setTimeout(function(){w.terminate();send('error','Stopped: the code ran for more than 5 seconds.');send('done')},5000);
-w.onmessage=function(e){if(e.data.type==='done'){clearTimeout(t);w.terminate()}send(e.data.type,e.data.text)};
-w.onerror=function(e){clearTimeout(t);send('error',e.message||'Error');send('done');w.terminate();e.preventDefault&&e.preventDefault()};
-})();<\/script>`;
+  frame.srcdoc = runnerDoc(id, code, 5000);
   return out;
 }
 
@@ -9585,6 +9868,7 @@ function showChatMenu(anchor = els.moreBtn) {
       { icon: 'download', label: 'Save as a file', desc: 'Markdown', run: () => downloadFile(`${safeName(c.title)}.md`, chatToMarkdown(c), 'text/markdown', 'mixed') },
       { icon: 'print', label: 'Print or save as PDF', run: () => printHtml(chatToHtml(c)) },
       { icon: 'copy', label: 'Copy the whole chat', desc: 'As Markdown', run: () => copyText(chatToMarkdown(c)) },
+      { icon: 'link', label: 'Share as a private link', desc: 'The chat goes inside the link; no server stores it', hidden: c.temp, run: () => ShareLink.share(c) },
       { icon: 'file', label: 'Show the memory summary', hidden: !c.summary, run: () => openViewer('Summary of the earlier chat', () => h('p', { class: 'readsum', text: c.summary })) },
     ] },
     { items: [{ icon: 'trash', label: 'Delete this chat', run: () => deleteChat(c.id) }] },
@@ -9596,6 +9880,7 @@ els.moreBtn.addEventListener('click', () => {
     { icon: 'download', label: 'Save as a Markdown file', run: () => downloadFile(`${safeName(c.title)}.md`, chatToMarkdown(c), 'text/markdown', 'mixed') },
     { icon: 'print', label: 'Print or save as PDF', run: () => printHtml(chatToHtml(c)) },
     { icon: 'copy', label: 'Copy the whole chat', desc: 'As Markdown, to paste anywhere', run: () => copyText(chatToMarkdown(c)) },
+    { icon: 'link', label: 'Share as a private link', desc: 'The chat goes inside the link; no server stores it', hidden: c.temp, run: () => ShareLink.share(c) },
   ] }], { below: true, right: true });
 });
 /* Rename in place: in the sidebar on a wide screen, in a small window on a phone. */
@@ -9709,7 +9994,8 @@ const Dictation = (() => {
       if (isLocal()) {
         const st = await localState();
         if (st !== 'available') { toast(st === 'downloadable' || st === 'downloading' ? 'The private dictation language pack is not on this computer yet. Open Settings, then Dictation, to download it.' : 'Private dictation is not available in this browser any more. Open Settings, then Dictation.'); return; }
-      } else if (navigator.onLine === false) { toast('Online dictation needs the internet, and you are offline.'); return; }
+      } else if (S.offline) { toast('Offline mode is on, and online dictation would send your voice to the browser’s speech service. Use private dictation (Settings → Voice) or turn Offline mode off.'); return; }
+      else if (navigator.onLine === false) { toast('Online dictation needs the internet, and you are offline.'); return; }
       const r = new SR();
       r.lang = lang(); r.continuous = true; r.interimResults = true; r.maxAlternatives = 1;
       if (isLocal()) {
@@ -9993,12 +10279,9 @@ function renderChips() {
     }
   }
   if (rk) { els.sugg.hidden = true; els.sugg.replaceChildren(); }
-  const lab = Learn.learnedLabel();
   const rl = Review.label();
   const rb = document.getElementById('reviewBtn');
   rb.hidden = !rl; rb.innerHTML = rl ? `${icon('cards', 14)}<span>${esc(rl)}</span>` : '';
-  els.learnedBtn.hidden = !lab;
-  els.learnedBtn.innerHTML = lab ? `${icon('bulb', 14)}<span>${esc(lab)}</span>` : '';
 }
 /* Put a prompt in the message box (the cursor goes where your words belong: a double space in a template, else the end). */
 function fillInput(text) {
@@ -10008,7 +10291,6 @@ function fillInput(text) {
   els.input.setSelectionRange(at, at);
   updateSlash();
 }
-els.learnedBtn.addEventListener('click', () => Learn.showLearned());
 document.getElementById('reviewBtn').addEventListener('click', () => Review.show());
 Review.on(() => { if (!App.chats.length || !current()?.messages.length) renderChips(); });
 Learn.on(() => { if (!App.chats.length || !current()?.messages.length) renderChips(); });
@@ -10117,6 +10399,12 @@ const LEGAL_PAGES = {
       'Under each answer you see the effort that was used; point at it to see which AI model wrote it.',
       'Answers you copy end with “(' + AI_LABEL + ')” (you can switch this off in Settings, for example for code).',
       'Files you save (Markdown and web pages) say at the end that they were made by an AI, and also carry a machine-readable note for software: “front matter” at the top of Markdown files and meta tags in web pages, with the IPTC code for AI-made content. Lumen does not hide a watermark in the wording of answers.']),
+    lh('Private by design'),
+    lul(['Under every answer, “On this device” opens its privacy receipt: what (if anything) left your device while it was made. Settings → Data and privacy lists every request Lumen made to another site.',
+      'Offline mode (the sliders button next to +) blocks every request to another site. The AI keeps working from what it knows, your memory and your files.',
+      'Files and whole folders you add are read on your device. Nothing is uploaded.',
+      'JavaScript in an answer can be run, and is checked automatically, in a locked box on your device that has no network and cannot reach the page. Still read code before you use it.',
+      'A chat you share as a private link travels inside the link itself; no server stores it. Anyone who has the link can read it.']),
     lh('Who it is for'),
     lp('Lumen is recommended for people aged 15 and over. Younger people should use it together with a parent or guardian.'),
     lh('If you are struggling'),
@@ -10133,14 +10421,18 @@ const LEGAL_PAGES = {
     lh('What is saved on your device'),
     lul(['Your chats and your projects (their instructions and files), in the browser’s database (IndexedDB). Temporary chats are never saved.', 'Your settings, memory, learned habits, your own answer styles and your answers to the setup questions (which computer this is, its memory, what you use Lumen for) (localStorage).', 'What Auto learned about effort: for each kind of question (for example math or code), the effort level and whether you rated the answer good or wrong, for up to 90 days. It holds no text from your chats (localStorage). You can reset it in “What Lumen has learned”.', 'Usage numbers: how many answers and tokens, how many answers you marked good or wrong, how many were checked against sources, and how long Lumen was open and in use, one small line per day (localStorage). They hold no text from your chats.', 'Notes from look-ups, answers you marked as good, and files you added, as short saved text (IndexedDB). A correction you type after marking an answer wrong is saved with your memory.',
       'The offline Wikipedia copy, only if you add one (IndexedDB).', 'While the AI works, a tiny note (which model, how long, whether the tab is in front) in this tab’s session storage. It is removed when the answer ends, and it is used only to explain a page restart. A short list of recent restarts is kept with your settings.', 'The AI model files and a copy of this page so it opens without internet (browser storage: the Cache API, or the site’s private file storage if the browser damaged files in the Cache API).',
-      'While a chat is open, the AI engine keeps that chat in your graphics chip’s memory, so a follow-up question is answered faster. This is never written to disk and is gone when you close the page or switch to another chat or model.']),
+      'While a chat is open, the AI engine keeps that chat in your graphics chip’s memory, so a follow-up question is answered faster. This is never written to disk and is gone when you close the page or switch to another chat or model.',
+      'A record of what left this device: for the last 150 requests to other sites, the site, the time and the search words (never a chat), so you can check it in Settings → Data and privacy. Each answer keeps its own short list (its privacy receipt). You can clear the record there.',
+      'Files and folders you add to a chat or project are read on your device and saved with that chat (IndexedDB). They are never uploaded.']),
     lp('Lumen needs this to work the way you asked, so there is no cookie banner. Lumen uses no tracking, no analytics, no ads and no accounts.'),
     h('div', { class: 'row' }, h('button', { class: 'btn', type: 'button', text: 'Delete all my data…', onclick: () => { closeLegal(); openSettings('storage'); } })),
     lp('You can delete everything at any time in Settings → Data and privacy → “Delete all my data”, or by clearing this site’s data in your browser.'),
     lh('What Lumen sends out'),
     lp('Your questions are answered on your device. Only short messages go out, and only when Lumen needs a look-up. You can switch every source off in Settings → Look-ups.'),
     h('div', { class: 'priv' }, ...privacyRows().map(([a, b]) => h('div', { class: 'pv-row' }, h('b', { text: a }), h('span', { text: b })))),
-    lp('Never sent: your chats, files, memory, saved notes, name, rules or settings.'),
+    lp('Never sent: your chats, files, memory, saved notes, name, rules or settings. Offline mode stops even the look-ups above: while it is on, Lumen blocks every request to another site.'),
+    lh('Sharing a chat'),
+    lp('If you choose “Share as a private link”, the chat (your questions, the answers and their source links) is packed into the link itself, after the “#”. That part of an address is not sent to any server when the link is opened, so neither I nor GitHub receive the chat. But anyone who has the link can read it, and the app you send it with (a messenger or email) can see it, so share it only with people you trust and do not put other people’s private details in a shared chat. A person who opens your link gets a copy in their own browser.'),
     lh('Other companies that see your connection'),
     lul([
       [ext('https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement', 'GitHub Pages'), ' (GitHub, Inc.) hosts this page, the AI engine and the page libraries (they are part of this site, no other server delivers them). GitHub logs the IP address of visitors for security.'],
@@ -10161,6 +10453,8 @@ const LEGAL_PAGES = {
       [h('b', { text: 'AI can be wrong. ' }), 'Answers are made automatically. They can be false, incomplete, out of date, biased or offensive. Lumen may say untrue things about real people. Always check important information.'],
       [h('b', { text: 'No professional advice. ' }), 'Nothing from Lumen is medical, legal, financial, psychological or other professional advice. In an emergency call 112. If you are in crisis, call a helpline (see “About Lumen and its limits”).'],
       [h('b', { text: 'Your responsibility. ' }), 'You are responsible for what you ask and for how you use the answers. Answers made by an AI may not be protected by copyright, and I claim no rights in them. If you copy text that comes from Wikipedia, say so (CC BY-SA 4.0). If you publish text from Lumen to inform the public about matters of public interest, EU law (the AI Act, Article 50(4)) may require you to say that it was made by an AI, unless a person reviewed it and takes editorial responsibility for it.'],
+      [h('b', { text: 'Code. ' }), 'Lumen runs JavaScript from answers only in a locked box on your device, without network access. Code an AI writes can still be wrong or unsafe: read it before you use it, and you are responsible for running it anywhere else.'],
+      [h('b', { text: 'Shared chats. ' }), 'Only share chats you have the right to share, and no private details of other people. A chat someone shares with you was written partly by an AI; check it before you rely on it.'],
       [h('b', { text: 'Not allowed. ' }), 'Do not use Lumen to break the law; to make content that sexually exploits children; to plan violence, terrorism or weapons (including chemical, biological, nuclear or cyber weapons); to harass, threaten, defame or pretend to be another person; to make spam, malware or fraud; or to get around the safety features of the AI model.'],
       [h('b', { text: 'Liability. ' }), 'As far as the law allows, I am not liable for any damage from using Lumen. This does not limit liability that the law does not allow me to exclude, for example for intent or gross negligence.'],
       [h('b', { text: 'Other people’s material. ' }), 'Lumen uses AI models by the Qwen team at Alibaba Cloud (Qwen3.5, which Lumen calls Sparvelle, Lanthelle, Radivane and Solvarra) and text from Wikipedia and other sources. See Credits.'],
@@ -10390,6 +10684,17 @@ function renderSettingsModels() {
       h('div', { class: 'desc', text: m.desc }), facts, act.childElementCount ? act : null));
   }
 }
+let ledgerBox = null;
+function renderPrivacyLedger() {
+  if (!ledgerBox) return;
+  const all = Ledger.all().reverse();
+  const today = all.filter(e => Date.now() - e.t < 864e5 && !e.b).length;
+  ledgerBox.replaceChildren(
+    h('p', { class: 'hint', html: `${icon('lock', 14)} <b>Your chats sent to any server: none.</b> Requests in the last 24 hours: ${today}${S.offline ? ' · Offline mode is on' : ''}.` }),
+    all.length ? h('ul', { class: 'lrn-list' }, ...all.slice(0, 40).map(e => h('li', {}, h('b', { text: e.h }), ` · ${LEDGER_KIND[e.k] || e.k}${e.n > 1 ? ` (${e.n} files)` : ''}${e.w && e.k !== 'model' ? `: “${e.w}”` : ''}${e.b ? ' (blocked by Offline mode)' : ''} `, h('i', { text: whenText(e.t) }))))
+      : h('p', { class: 'hint', text: 'Nothing has left this device yet.' }),
+    all.length ? h('div', { class: 'opt-row' }, h('button', { class: 'btn', type: 'button', text: 'Clear this list', onclick: () => { Ledger.clear(); renderPrivacyLedger(); } })) : null);
+}
 let storageEl = null;
 async function renderStorage() {
   if (!storageEl) return;
@@ -10459,7 +10764,7 @@ function openSettings(focus) {
   const paintSize = () => { sizeInfo.textContent = Brain.state === 'ready' ? `Running now with room for about ${Math.round(Brain.ctx * 0.75 / 100) * 100 >= 1000 ? (Math.round(Brain.ctx * 0.75 / 1000)) + ',000' : Brain.ctx} words at once (${Brain.ctx.toLocaleString('en-US')} tokens).` : 'Applies the next time the model starts.'; };
   paintSize();
   b.append(sec('ctx', 'Working memory', hint('How much Lumen keeps in mind at once: your chat, files and notes. Bigger uses more graphics memory.'), more('If your graphics chip cannot hold the size you choose, Lumen quietly uses a smaller one.'),
-    h('div', { class: 'opt-row' }, seg('Memory size', [['small', `Small · ${m0.ctxSizes.small / 1024}K`], ['standard', `Standard · ${m0.ctxSizes.standard / 1024}K`], ['large', `Large · ${m0.ctxSizes.large / 1024}K`], ['max', `Maximum · ${m0.ctxSizes.max / 1024}K`]], S.ctxSize, v => { S.ctxSize = v; saveSettings(); applyMemorySize(); setTimeout(paintSize, 400); updateMeter(); })),
+    h('div', { class: 'opt-row' }, seg('Memory size', [['small', `Small · ${m0.ctxSizes.small / 1024}K`], ['standard', `Standard · ${m0.ctxSizes.standard / 1024}K`], ['large', `Large · ${m0.ctxSizes.large / 1024}K`], ['max', `Maximum · ${m0.ctxSizes.max / 1024}K`]], S.ctxSize, v => { S.ctxSize = v; S.ctxPicked = true; saveSettings(); applyMemorySize(); setTimeout(paintSize, 400); updateMeter(); })),
     sizeInfo));
 
   // Battery saver
@@ -10575,7 +10880,9 @@ function openSettings(focus) {
     row('Style', 'How answers are written.', seg('Answer style', Object.entries(STYLES).map(([k, v]) => [k, v.label]), S.style, v => { S.style = v; saveSettings(); renderPills(); })),
     row('Creativity', 'Precise is best for math and facts.', seg('Creativity', [['precise', 'Precise'], ['balanced', 'Balanced'], ['creative', 'Creative']], S.creativity, v => { S.creativity = v; saveSettings(); })),
     row('Check answers against sources', 'When an answer has a date, number or name that no source contains, Lumen writes it again once without it. It takes a little longer, only when needed.',
-      seg('Check answers against sources', [['on', 'On'], ['off', 'Off']], S.check ? 'on' : 'off', v => { S.check = v === 'on'; saveSettings(); }))));
+      seg('Check answers against sources', [['on', 'On'], ['off', 'Off']], S.check ? 'on' : 'off', v => { S.check = v === 'on'; saveSettings(); })),
+    row('Run and fix code', 'JavaScript in an answer is run in a locked box on this device (no network, no access to the page). If it stops with an error, the AI gets one try to fix it, and the fix is kept only if it runs.',
+      seg('Run and fix code', [['on', 'On'], ['off', 'Off']], S.codeCheck !== false ? 'on' : 'off', v => { S.codeCheck = v === 'on'; saveSettings(); }))));
   const srcBox = h('div', { class: 'src-list' });
   sourceRows(srcBox);
   const checkBtn = h('button', { class: 'btn', type: 'button', html: `${icon('refresh', 15)}<span>Check connections</span>`, onclick: () => checkConnections(checkBtn, srcBox) });
@@ -10780,8 +11087,14 @@ function openSettings(focus) {
     hint('The page and its libraries come from this site (GitHub Pages). The AI model files are downloaded once from Hugging Face and GitHub. Those servers see your internet address.'),
     h('div', { class: 'lrn-switch' }, h('div', { class: 'lt' }, h('b', { text: 'Label copied answers' }), h('span', { text: `Adds “(${AI_LABEL})” when you copy an answer. Saved files and printouts always carry it.` })),
       toggle('Label copied answers', S.aiLabel !== false, v => { S.aiLabel = v; saveSettings(); })),
+    h('div', { class: 'lrn-switch' }, h('div', { class: 'lt' }, h('b', { text: 'Offline mode' }), h('span', { text: 'Nothing leaves this device: no look-ups, no downloads, no online dictation. Lumen blocks every request to another site while it is on. The AI still answers from what it knows, your memory and your files.' })),
+      toggle('Offline mode', S.offline, v => setOffline(v))),
+    h('h4', { text: 'What left this device' }),
+    hint('Every request Lumen made to another site, newest first: the site and the words it sent (your chats never). This list stays on this device.'),
+    ledgerBox = h('div', { class: 'ledger' }),
     h('div', { class: 'opt-row' }, ...[['about', 'About and limits'], ['privacy', 'Privacy'], ['terms', 'Terms'], ['credits', 'Credits']].map(([k, t]) => h('button', { class: 'btn', type: 'button', text: t, onclick: () => openLegal(k) })))));
 
+  renderPrivacyLedger();
   const sc = h('div', { class: 'shortcuts' });
   for (const [what, keys] of [['Send message', S.sendKey === 'mod' ? [MOD, 'Enter'] : ['Enter']], ['New line', S.sendKey === 'mod' ? ['Enter'] : ['Shift', 'Enter']], ['Commands', ['/']], ['Stop the answer', ['Esc']], ['Search and commands', [MOD, 'K']], ['Add a file', [MOD, 'U']], ['New chat', [MOD, 'Shift', 'O']], ['Show or hide the sidebar', [MOD, 'B']], ['What Lumen can do', [MOD, '/']]])
     sc.append(h('span', { text: what }), h('span', {}, ...keys.map(k => h('kbd', { text: k }))));
@@ -11485,9 +11798,23 @@ const Setup = (() => {
     navigator.storage?.estimate?.().then(e => { if (st && e?.quota) { st.free = Math.max(0, e.quota - (e.usage || 0)); if (STEPS[st.i] === 'ready') paint(); } }).catch(() => {});
   }
   function close() { if (dlg?.open) dlg.close(); st = null; }
+  /* What you chose is kept, also when you skip the rest (the model is only chosen with the last button). */
+  function saveAnswers() {
+    S.computer = { device: st.device, ram: st.ram || 0, tier: st.tier || '', gpu: st.gpu || '', at: Date.now() };
+    if (st.name.trim()) S.name = st.name.trim().slice(0, 40);
+    S.uses = st.uses.filter(u => USES.some(x => x[0] === u));
+    if (STYLES[st.style]) S.style = st.style;
+    if (MODES[st.mode]) S.mode = modeKeyOf(st.mode);
+    S.wiki = WIKI_MODES[st.wiki] ? st.wiki : 'auto';
+    if (S.wiki === 'off') { S.learn.daily = false; S.learn.dailyTopics = false; }
+    S.theme = st.theme; applyTheme();
+    S.autoStart = st.auto;
+  }
   function skip() {
-    if (!S.setupDone) { S.setupDone = 1; saveSettings(); }
-    close(); renderThread();
+    if (st && st.i > 0 && !st.only) saveAnswers();   // the answers given so far count
+    if (!S.setupDone) S.setupDone = 1;
+    saveSettings();
+    close(); renderThread(); renderPills();
     if (!narrow()) els.input.focus();
   }
   const go = d => { st.i = Math.max(0, Math.min(STEPS.length - 1, st.i + d)); if (STEPS[st.i] === 'memory' && st.device === 'phone') st.i += d > 0 ? 1 : -1; paint(); };
@@ -11564,15 +11891,7 @@ const Setup = (() => {
   }
   async function finish() {
     const p = plan({ device: st.device, ram: st.ram || 0, tier: st.tier, gpu: st.gpu });
-    S.computer = { device: st.device, ram: st.ram || 0, tier: st.tier || '', gpu: st.gpu || '', at: Date.now() };
-    if (st.name.trim()) S.name = st.name.trim().slice(0, 40);
-    S.uses = st.uses.filter(u => USES.some(x => x[0] === u));
-    if (STYLES[st.style]) S.style = st.style;
-    if (MODES[st.mode]) S.mode = modeKeyOf(st.mode);
-    S.wiki = WIKI_MODES[st.wiki] ? st.wiki : 'auto';
-    if (S.wiki === 'off') { S.learn.daily = false; S.learn.dailyTopics = false; }
-    S.theme = st.theme; applyTheme();
-    S.autoStart = st.auto;
+    saveAnswers();
     if (p.strong && (st.ram || 0) >= 16) S.strongPc = true;   // the 9B model does not need to ask again on this computer
     S.setupDone = 2; saveSettings();
     const m = Brain.model(st.model), go_ = Brain.cached[m.key] || st.download;
@@ -11600,6 +11919,10 @@ const Setup = (() => {
     return c;
   });
   renderSidebar(); renderThread(); renderTitle();
+  // the first time on this device: the setup questions come up at once (see Setup); afterwards never by itself
+  const firstVisit = !S.setupDone;
+  if (/^#share=/.test(location.hash)) await ShareLink.receive();
+  if (firstVisit) Setup.open();
   Cache.prune();
   Learn.start();
   if (location.protocol.startsWith('http') && 'serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
@@ -11617,12 +11940,10 @@ const Setup = (() => {
     if (S.autoStart && Brain.cached[S.model] && Brain.state === 'idle' && S.noAuto !== S.model) Brain.load(S.model).catch(() => {});
   }
   Lab.resume().catch(() => {});
-  // the first time on this computer: a few questions to pick the right model (see Setup)
-  if (!S.setupDone && Brain.state !== 'checking') Setup.open();
-  else if (!narrow()) els.input.focus();
+  if (!firstVisit && !narrow()) els.input.focus();
 })();
 try { window.hljs?.configure({ ignoreUnescapedHTML: true }); } catch {}
-window.__lumen = { WEBLLM_URL, MODES, LEVELS, modeOf, modeKeyOf, levelStep, EffortLearn, replayFor, reasoningIn, modelByName, ModelFiles, Setup, Projects, Artifact, docsOf, branchChat, artifactsOf, chooseModel, whenText, Guard, Bigger, Teach, Ground, Usage, LEGAL, Care, openLegal, labelCopy, showReadBox, WikiPack, Speech, Dictation, Lab, LabScore, LAB_QUESTIONS, LAB_PUZZLES, openLab, App, Brain, S, Calc, Net, Cache, splitStream, looping, trimRepeat, thinkTitle, renderMarkdown, shouldLookUp, keywordQuery, entityQuery, terms, cleanAnswer,
+window.__lumen = { WEBLLM_URL, Ledger, ShareLink, readFolder, checkableJs, runJsQuiet, smallDevice, MODES, LEVELS, modeOf, modeKeyOf, levelStep, EffortLearn, replayFor, reasoningIn, modelByName, ModelFiles, Setup, Projects, Artifact, docsOf, branchChat, artifactsOf, chooseModel, whenText, Guard, Bigger, Teach, Ground, Usage, LEGAL, Care, openLegal, labelCopy, showReadBox, WikiPack, Speech, Dictation, Lab, LabScore, LAB_QUESTIONS, LAB_PUZZLES, openLab, App, Brain, S, Calc, Net, Cache, splitStream, looping, trimRepeat, thinkTitle, renderMarkdown, shouldLookUp, keywordQuery, entityQuery, terms, cleanAnswer,
   localToolLines, timeNotes, unitNotes, fxIntent, weatherIntent, cryptoIntent, gather, selectDocText, chunkDoc, pickMode, pickPlaybook, planBudget, buildMessages, parseSlash, jsonFromText, STUDY_CHECK, readFileText, summarizeDocs, scheduleSummary, addMemory, Learn, Core, confidenceOf, Saver, Review, ROLES, setRole, getRole, solveParts, checkArithmetic, essayParagraphs, quoteInText, verifyComments, pickTop, runEssay, factCheck, claimsFrom, debateBalance, showFactCheck, chatToMarkdown, openSettings, submitText, send, wantDocs, plainText, slidesToHtml, chatToHtml, wikidataProps, webSearch, readPage, forkAt, switchFork, forkInfo, voteWorthy, finalAnswerOf, voteKey, voteTally, Examples, PROMPT_VERSIONS, basePrompt, EXAMPLES, systemPrompt, importBackup, Store, openChat, renderThread, saveChat, regenerate, resendEdited };
 </script>
 </body>

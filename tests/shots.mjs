@@ -59,6 +59,10 @@ const all = {
   darkHomeMenu: { dark: true, setup: async p => { await p.click('#modelChip'); } },
   effortMenu: { setup: async p => { await p.click('#modeBtn'); } },
   legalAbout: { setup: async p => { await p.evaluate(() => window.__lumen.openLegal('about')); } },
+  receipt: { setup: async p => { await chat(p); await p.click('.msg-ai.last .receipt'); } },
+  offline: { setup: async p => { await chat(p); await p.evaluate(() => { window.__lumen.S.offline = true; window.__lumen.S.mode = 'low'; }); await p.click('#newChat'); await p.fill('#input', 'What is photosynthesis?'); await p.press('#input', 'Enter'); await p.waitForFunction(() => !window.__lumen.App.run && window.__lumen.App.chats.length === 2); await p.evaluate(() => window.__lumen.renderPills?.()); } },
+  plusMenu: { setup: async p => { await p.click('#plusBtn'); } },
+  ledger: { setup: async p => { await chat(p); await p.evaluate(() => window.__lumen.openSettings('data')); await p.waitForTimeout(300); await p.evaluate(() => document.querySelector('.ledger')?.scrollIntoView()); } },
   modelMenu: { setup: async p => { await p.click('#modelChip'); } },
   effortDark: { dark: true, setup: async p => { await p.evaluate(() => { window.__lumen.S.mode = 'xhigh'; }); await p.click('#modeBtn'); } },
 };
