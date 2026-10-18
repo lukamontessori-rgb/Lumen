@@ -1,7 +1,7 @@
 // Lumen service worker: lets the page itself open without internet after the first visit.
 // The AI model files are cached separately by the WebLLM engine (in its own "webllm/..." caches).
 // The page libraries are part of this site (the folder vendor/), so they are cached like the page itself.
-const SHELL = 'lumen-shell-v20';
+const SHELL = 'lumen-shell-v21';
 const SHELL_FILES = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png',
   './vendor/marked-18.0.14/marked.umd.js', './vendor/dompurify-3.4.16/purify.min.js', './vendor/katex-0.18.9/katex.min.js',
   './vendor/katex-0.18.9/katex.min.css', './vendor/highlight.js-11.12.0/highlight.min.js'];

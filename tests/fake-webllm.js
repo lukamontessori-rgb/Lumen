@@ -89,6 +89,8 @@ class FakeEngine {
   async reload(id, chatOpts) {
     const t = T();
     t.loads = (t.loads || 0) + 1;
+    // tests: a start that never answers, as a graphics chip that is stuck or busy (hangLoad: true = always, 'once' = the first time)
+    if (t.hangLoad === true || (t.hangLoad === 'once' && !t.hungOnce)) { t.hungOnce = true; t.hungIn = this.inWorker ? 'worker' : 'page'; await new Promise(() => {}); }
     const rec = this.appConfig.model_list.find(m => m.model_id === id);
     if (!rec) throw new Error('Cannot find model record in appConfig for ' + id);
     const backend = this.appConfig.cacheBackend || 'cache';
@@ -204,7 +206,7 @@ function answerFor(req, t) {
   return think + `**Short answer:** here is a test answer about “${q}”${cite}.\n\nIt explains the idea in simple steps:\n\n1. First step.\n2. Second step.\n\nThat is all.`;
 }
 
-export async function CreateMLCEngine(id, cfg = {}, chatOpts) { const e = new FakeEngine(cfg); await e.reload(id, chatOpts); return e; }
+export async function CreateMLCEngine(id, cfg = {}, chatOpts) { const e = new FakeEngine(cfg); T().lastWay = 'page'; await e.reload(id, chatOpts); return e; }
 /* The real one runs the engine in a worker. The pretend one ignores the worker and runs in the page. */
-export async function CreateWebWorkerMLCEngine(worker, id, cfg = {}, chatOpts) { if (T().workerFails) throw new Error('worker-failed'); return CreateMLCEngine(id, cfg, chatOpts); }
+export async function CreateWebWorkerMLCEngine(worker, id, cfg = {}, chatOpts) { if (T().workerFails) throw new Error('worker-failed'); const e = new FakeEngine(cfg); e.inWorker = true; T().lastWay = 'worker'; await e.reload(id, chatOpts); return e; }
 export class WebWorkerMLCEngineHandler { onmessage() {} }

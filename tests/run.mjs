@@ -1106,6 +1106,67 @@ test('a saved model starts loading when you begin to type (if it does not start 
   eq(errors.concat(p2.errors), [], 'errors');
 });
 
+/* ===================== version 21: a model that does not start ===================== */
+test('a start that hangs: choosing another model stops it and starts the new one at once', async () => {
+  const { page, errors } = await open();
+  await download(page, 'Qwen3.5-0.8B');                       // both models saved
+  await download(page);
+  await page.reload(); await page.waitForFunction(() => window.__lumen && window.__lumen.Brain.state !== 'checking');
+  await L(page, () => { window.__fakeLLM.hangLoad = true; window.__lumen.S.autoStart = false; window.__lumen.Brain.load('Qwen3.5-2B').catch(() => {}); });
+  await until(page, () => window.__lumen.Brain.state === 'loading' && window.__lumen.Brain.phase === 'Loading from this browser');
+  await page.waitForSelector('#brainCard .load-step');
+  assert(await page.$('#brainCard button:has-text("Stop")'), 'a Stop button while it starts');
+  await L(page, () => { window.__fakeLLM.hangLoad = false; });
+  await page.click('#modelChip');
+  await page.click('.menu button:has-text("Sparvelle")');
+  await until(page, () => window.__lumen.Brain.state === 'ready' && window.__lumen.Brain.loadedKey === 'Qwen3.5-0.8B', null, 10000);
+  await page.waitForTimeout(300);
+  eq(await L(page, () => [window.__lumen.Guard.depth, sessionStorage.getItem('lumen-run')]), [0, null], 'the stopped start leaves no crash note behind');
+  eq(errors, [], 'errors');
+});
+
+test('a start that hangs in the background worker is started again on the page, by itself', async () => {
+  const { page, errors } = await open();
+  await download(page);
+  await page.reload(); await page.waitForFunction(() => window.__lumen && window.__lumen.Brain.state !== 'checking');
+  await L(page, () => { const B = window.__lumen.Brain; B.limits.firstCached = 1500; B.limits.warn = 700; window.__fakeLLM.hangLoad = 'once'; window.__fakeLLM.hungOnce = false; B.load('Qwen3.5-2B').catch(() => {}); });
+  await until(page, () => window.__lumen.Brain.state === 'ready', null, 15000);
+  const r = await L(page, () => [window.__fakeLLM.hungIn, window.__fakeLLM.lastWay, window.__lumen.Brain.noWorker, window.__lumen.Brain.trace.some(t => /without the worker/.test(t))]);
+  eq(r, ['worker', 'page', true, true], 'first try in the worker hung, the second ran on the page');
+  eq(errors, [], 'errors');
+});
+
+test('a start that never works: Stop works, and the error shows details you can copy', async () => {
+  const { page, errors } = await open();
+  await download(page);
+  await page.reload(); await page.waitForFunction(() => window.__lumen && window.__lumen.Brain.state !== 'checking');
+  await L(page, () => { window.__fakeLLM.hangLoad = true; window.__lumen.Brain.load('Qwen3.5-2B').catch(() => {}); });
+  await page.waitForSelector('#brainCard button:has-text("Stop")');
+  await page.click('#brainCard button:has-text("Stop")');
+  await until(page, () => window.__lumen.Brain.state === 'idle');
+  await L(page, () => { const B = window.__lumen.Brain; B.limits.firstCached = 1200; B.limits.warn = 600; B.load('Qwen3.5-2B').catch(() => {}); });
+  await until(page, () => window.__lumen.Brain.state === 'error', null, 15000);
+  await page.click('#brainCard summary:has-text("Details")');
+  const d = await page.textContent('#brainCard pre.trace');
+  assert(/Qwen3\.5-2B-q4f16_1-MLC/.test(d) && /start Qwen3\.5-2B/.test(d) && /without the worker/.test(d), 'details: ' + d);
+  assert(await page.$('#brainCard button:has-text("Copy the details")'), 'copy button');
+  eq(errors.filter(e => !/stalled/.test(e)), [], 'errors');
+});
+
+test('a Lumen tab in the background lets go of its model when another tab starts one', async () => {
+  const { page, context, errors } = await open();
+  await download(page);
+  await L(page, () => Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' }));
+  const p2 = await newPage({ context });
+  await p2.page.goto(BASE);
+  await p2.page.waitForFunction(() => window.__lumen && window.__lumen.Brain.state !== 'checking');
+  await L(p2.page, () => window.__lumen.Brain.load('Qwen3.5-2B').catch(() => {}));
+  await until(page, () => window.__lumen.Brain.state === 'idle', null, 8000);
+  assert(await L(page, () => window.__lumen.Brain.trace.some(t => /let go/.test(t))), 'noted');
+  await until(p2.page, () => window.__lumen.Brain.state === 'ready');
+  eq(errors.concat(p2.errors), [], 'errors');
+});
+
 /* ===================== older features, end to end ===================== */
 import zlib from 'node:zlib';
 function tinyPdf(text) {

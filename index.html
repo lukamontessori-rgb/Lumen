@@ -2029,10 +2029,13 @@ const Brain = {
   loadedKey: null, loadingKey: null, loadPromise: null,
   phase: '', progress: 0, mb: 0, elapsed: 0, error: '', ctx: 8192, ctxWanted: 0, gpu: '',
   cached: {}, listeners: new Set(), busy: false, queue: Promise.resolve(),
-  limits: { firstCached: 60e3, first: 90e3, after: 60e3, warn: 20e3, genFirst: 300e3, genNext: 120e3, genTick: 2000, sleepGap: 20e3, unload: 4000 },   // how long to wait with no sign of progress (ms); gen* = while the AI writes an answer
+  limits: { firstCached: 40e3, first: 90e3, after: 60e3, warn: 20e3, genFirst: 300e3, genNext: 120e3, genTick: 2000, sleepGap: 20e3, unload: 4000 },   // how long to wait with no sign of progress (ms); gen* = while the AI writes an answer
   lastEvent: 0, events: 0, otherTab: false, stalled: false, stuck: false, wasCached: false, loadToken: 0, bc: null, tabId: '', pongs: 0,
 
   emit() { for (const f of this.listeners) { try { f(this); } catch (e) { console.error(e); } } },
+  /* The last steps of starting a model, with the time: shown under "Details" when a model cannot start, so it can be sent to whoever helps. */
+  trace: [],
+  note(s) { const t = new Date(); this.trace.push(`${t.toTimeString().slice(0, 8)} ${s}`); if (this.trace.length > 40) this.trace.shift(); },
   model(key) { return MODELS.find(m => m.key === key) || MODELS[0]; },
   modelId(key) { const m = this.model(key); return this.f16 ? m.ids.f16 : m.ids.f32; },
 
@@ -2046,8 +2049,18 @@ const Brain = {
         const d = e.data || {};
         if (d.t === 'ping' && d.id !== this.tabId) this.bc.postMessage({ t: 'pong', id: this.tabId, to: d.id });
         else if (d.t === 'pong' && d.to === this.tabId) this.pongs++;
+        else if (d.t === 'release' && d.id !== this.tabId) this.letGo();
       };
     } catch { this.bc = null; }
+  },
+  /* Another Lumen tab is starting a model. A tab in the background that is not answering lets go of its own model, so the
+     graphics memory is free (two copies of a big model do not fit, and the new one would sit at 0%). */
+  letGo() {
+    if (document.visibilityState !== 'hidden' || App.run || this.busy || !['ready', 'loading'].includes(this.state)) return;
+    this.note('another Lumen tab is starting a model: this tab let go of its model');
+    if (this.state === 'loading') this.cancelLoad();
+    else { this.teardown().catch(() => {}); this.state = 'idle'; this.phase = ''; this.emit(); }
+    this.letGoNote = true;
   },
   async otherTabs() {
     if (!this.bc) return false;
@@ -2130,6 +2143,12 @@ const Brain = {
 
   onProgress(r, wasCached) {
     const t = r.text || '', was = this.phase;
+    if (t && t !== this.lastText) { this.lastText = t; this.note(t.slice(0, 90)); }
+    let k;
+    if ((k = t.match(/loading model from cache\[(\d+)\/(\d+)\]/i))) this.stepText = `Reading the saved model: part ${k[1]} of ${k[2]}`;
+    else if ((k = t.match(/shader modules\[(\d+)\/(\d+)\]/i))) this.stepText = `Preparing the graphics chip: ${k[1]} of ${k[2]}`;
+    else if (/start to fetch params/i.test(t)) this.stepText = 'Reading the saved model';
+    else if (/finish/i.test(t)) this.stepText = 'Almost ready';
     if (/fetching param cache/i.test(t)) this.phase = 'Downloading';
     else if (/loading model from cache/i.test(t)) this.phase = 'Loading from this browser';
     else if (/shader|loading gpu|compil/i.test(t)) this.phase = 'Preparing your graphics chip';
@@ -2145,7 +2164,7 @@ const Brain = {
 
   async createEngine(lib, id, onProgress, chatOpts) {
     const cfg = { appConfig: this.appConfig(lib), initProgressCallback: onProgress, logLevel: 'WARN' };
-    if (location.protocol !== 'file:' && typeof Worker !== 'undefined') {
+    if (location.protocol !== 'file:' && typeof Worker !== 'undefined' && !this.noWorker) {
       let worker = null, started = false;
       try {
         const src = `import * as webllm from "${WEBLLM_URL}";\nconst handler = new webllm.WebWorkerMLCEngineHandler();\nself.onmessage = (msg) => handler.onmessage(msg);\n`;
@@ -2197,9 +2216,9 @@ const Brain = {
     });
     if (this.state === 'ready' && this.loadedKey === key && this.ctxWanted === ctxTarget(this.model(key))) return Promise.resolve();
     if (this.state === 'loading' && this.loadingKey === key) return this.loadPromise;
-    // another model is still loading: a download is stopped (its finished files are kept) so the new choice starts at once
-    if (this.state === 'loading' && /^(Downloading|Checking)/.test(this.phase || 'Downloading') && !this.wasCached) this.cancelLoad();
-    else if (this.state === 'loading') return this.loadPromise.catch(() => {}).then(() => this.load(key));
+    // another model is still loading: it is stopped (a download keeps its finished files) and the new choice starts at once.
+    // This also frees a model that hangs while it starts on the graphics chip; waiting for it could take forever.
+    if (this.state === 'loading') this.cancelLoad();
     // the one-word warm-up after a start takes a moment: a model switch waits for it (at most 20 seconds) instead of being refused
     if (this.warming && !waited) return Promise.race([this.warming, new Promise(r => setTimeout(r, 20000))]).then(() => this.load(key, true));
     if (this.busy) return Promise.reject(new Error('Wait for the current answer to finish before switching models.'));
@@ -2240,7 +2259,7 @@ const Brain = {
     if (!r || !r.files || (!r.ok && r.missing)) return `${m.name} is not downloaded yet.`;
     if (!r.bad && !r.missing) { delete S.noAuto; saveSettings(); return `All ${r.files} files of ${m.name} are saved and whole.`; }
     if (App.run) return `${r.bad} broken and ${r.missing} missing. Wait for the answer to finish, then check again to repair them.`;
-    if (this.loadedKey === key || this.loadingKey === key) { this.loadToken++; try { this.dlCtl?.abort(); } catch {} await this.teardown(); this.state = 'idle'; this.loadingKey = null; }
+    if (this.loadedKey === key || this.loadingKey === key) { this.loadToken++; try { this.dlCtl?.abort(); } catch {} try { this.stopWaiting?.(); } catch {} await this.teardown(); this.state = 'idle'; this.loadingKey = null; }
     S.repairs = (S.repairs || []).filter(x => x?.key !== key); saveSettings();
     this.deepNext = key;
     this.load(key).catch(() => {});
@@ -2249,7 +2268,9 @@ const Brain = {
   /* Stop a download that is running (the finished files are kept, so Download carries on from there). */
   cancelLoad() {
     if (this.state !== 'loading') return;
+    this.note('stopped');
     this.loadToken++; try { this.dlCtl?.abort(); } catch {}
+    try { this.stopWaiting?.(); } catch {}   // the stopped load stops waiting for an engine that may never answer
     this.teardown().catch(() => {});
     this.state = 'idle'; this.phase = ''; this.progress = 0; this.loadingKey = null; this.emit();
     this.refreshCached();
@@ -2262,6 +2283,11 @@ const Brain = {
     this.stalled = false; this.stuck = false; this.lastEvent = Date.now(); this.events = 0;
     const token = ++this.loadToken;
     this.lastConv = null;   // a new start (or a new memory size) empties what the engine remembered of the chat
+    const stopped = new Promise((_, rej) => { this.stopWaiting = () => rej(new Error('cancelled')); });
+    stopped.catch(() => {});
+    this.loadT0 = Date.now(); this.stepText = '';
+    this.note(`start ${id} (memory ${ctxTarget(m)}, ${this.noWorker ? 'main page' : 'worker'})`);
+    try { this.bc?.postMessage({ t: 'release', id: this.tabId }); } catch {}   // Lumen tabs in the background let go of their model, so its memory is free
     try { this.dlCtl?.abort(); } catch {}
     this.dlCtl = new AbortController();
     const tLoad0 = performance.now();
@@ -2305,7 +2331,7 @@ const Brain = {
             if (idle > limit) { clearInterval(timer); rej(Object.assign(new Error('stalled'), { stalled: true })); }
           }, 500);
         });
-        return Promise.race([attempt(ctx), stall]).finally(() => clearInterval(timer));
+        return Promise.race([attempt(ctx), stall, stopped]).finally(() => clearInterval(timer));
       };
       // Ask for the memory size from Settings. If the graphics chip cannot hold it, step down to a smaller one.
       const target = ctxTarget(m);
@@ -2352,7 +2378,8 @@ const Brain = {
           }
           if (e?.stalled) {
             await this.teardown(); this.progress = 0;
-            if (wasCached && restarts++ < 1 && token === this.loadToken) { console.warn('Loading did not start; restarting it once.'); this.phase = 'Restarting'; this.stalled = false; this.emit(); i--; continue; }
+            // the second try runs the engine on the page itself instead of in a background worker: a different way that some browsers need
+            if (wasCached && restarts++ < 1 && token === this.loadToken) { console.warn('Loading did not start; restarting it once, without the background worker.'); this.note('no progress: restarting without the worker'); this.noWorker = true; this.phase = 'Restarting'; this.stalled = false; this.emit(); i--; continue; }
             throw e;
           }
           if (e?.message === 'cancelled') throw e;
@@ -2378,6 +2405,7 @@ const Brain = {
       if (e?.message === 'cancelled' && token !== this.loadToken) throw e;   // a newer load has started; leave it alone
       if (e?.message === 'stopped' && token !== this.loadToken) throw e;   // the download was cancelled
       if (!e?.offlineMode && !S.offline) console.error(e);   // Offline mode stopping a download is not an error
+      this.note('error: ' + String(e?.message || e).slice(0, 160));
       await this.teardown();
       this.state = 'error'; this.stalled = false;
       this.netFail = isNetworkError(e) && !e?.stalled;
@@ -2861,6 +2889,7 @@ const Guard = {
   lockOff() { const l = this.lock; this.lock = null; try { l?.release(); } catch {} },
 };
 window.addEventListener('pagehide', e => { if (!e.persisted) Guard.clear(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && Brain.letGoNote) { Brain.letGoNote = false; toast('Lumen was started in another tab, so this tab let go of the AI model to free memory. Press Start to use it here.', null, 9000); } });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && Guard.depth) { Guard.write(); Guard.lockOn(); } });
 
 /* ---------- safe calculator (no eval) ---------- */
@@ -10173,6 +10202,7 @@ function renderBrainCard() {
     if (bar) { bar.firstChild.style.width = pct + '%'; bar.setAttribute('aria-valuenow', String(pct)); }
     if (meta[0]) meta[0].textContent = pct + '%';
     if (meta[1]) meta[1].textContent = loadEta();
+    const step = card.querySelector('.load-step'); if (step) step.textContent = loadStep();
     return;
   }
   card.dataset.shape = shape;
@@ -10198,11 +10228,13 @@ function renderBrainCard() {
         h('h3', { text: `${Brain.phase || 'Starting'}: ${lm.name}` }),
         h('p', { text: Brain.phase === 'Downloading' ? 'This happens only once. Every file is checked as it arrives, and if the connection drops it carries on where it stopped. You can type your question now; Lumen answers as soon as it is ready.' : /Checking|another way/.test(Brain.phase) ? 'Checking that every saved file is whole. Only a broken file is downloaded again.' : 'Starting the model on your graphics chip.' }),
         h('div', { class: 'bar', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(pct) }, h('i', { style: `width:${pct}%` })),
-        h('div', { class: 'progress-meta' }, h('span', { text: `${pct}%` }), h('span', { text: eta }))),
+        h('div', { class: 'progress-meta' }, h('span', { text: `${pct}%` }), h('span', { text: eta })),
+        Brain.phase === 'Downloading' ? null : h('p', { class: 'load-step hint', 'aria-live': 'polite', text: loadStep() })),
+        Brain.phase !== 'Downloading' ? h('div', { class: 'row' }, h('button', { class: 'btn ghost', type: 'button', text: 'Stop', title: 'Stop starting the model. Press Start to try again, or choose another model.', onclick: () => { Brain.cancelLoad(); toast('Stopped. Press Start to try again, or choose another model.'); } }), changeBtn) :
         Brain.phase === 'Downloading' ? h('div', { class: 'row' }, h('button', { class: 'btn ghost', type: 'button', text: 'Pause download', title: 'The finished files are kept. Press Download later to carry on.', onclick: () => { Brain.cancelLoad(); toast('Download paused. The finished files are kept: press Download to carry on.'); } })) : null);
       if (Brain.otherTab || Brain.stalled) {
         const hint = Brain.otherTab ? 'Lumen is also open in another tab or window. Close the other one, then reload this page. Two copies cannot both start the model on one computer.'
-          : Brain.wasCached ? 'This is taking longer than usual. If nothing happens, Lumen will restart the loading by itself.'
+          : Brain.wasCached ? (Brain.noWorker ? 'This is still taking long. If nothing happens, Lumen will stop and say what it found. Closing other big apps and tabs, or quitting and reopening the browser, often helps.' : 'This is taking longer than usual. If nothing happens soon, Lumen will start it again another way by itself.')
           : 'Waiting for the download to start. A network that blocks the model server (some school and work networks do) can cause this.';
         card.firstChild.append(h('p', { class: 'stall-hint', role: 'status', text: hint }));
       }
@@ -10210,7 +10242,9 @@ function renderBrainCard() {
     }
     case 'error':
       card.classList.add('warn');
-      card.append(h('div', { class: 'bi' }, h('h3', { text: 'The model could not start' }), h('p', { text: Brain.error })),
+      card.append(h('div', { class: 'bi' }, h('h3', { text: 'The model could not start' }), h('p', { text: Brain.error }),
+        Brain.trace.length ? h('details', { class: 'more' }, h('summary', { text: 'Details (for help)' }), h('pre', { class: 'trace', text: brainDetails() }),
+          h('button', { class: 'btn', type: 'button', text: 'Copy the details', onclick: ev => copyText(brainDetails(), ev.currentTarget) })) : null),
         h('div', { class: 'row' }, h('button', { class: 'btn primary', type: 'button', text: 'Try again', onclick: () => Brain.load(S.model).catch(() => {}) }),
           Brain.stuck && Brain.wasCached ? armedButton('Delete the saved model and start over', 'Click again to delete and download', async () => { await Brain.remove(S.model); Brain.load(S.model).catch(() => {}); }) : null,
           changeBtn));
@@ -10227,6 +10261,15 @@ function renderBrainCard() {
     }
   }
 }
+/* What the engine is doing while it starts, and for how long: so a slow start looks different from a stuck one. */
+function loadStep() {
+  const secs = Brain.loadT0 ? Math.round((Date.now() - Brain.loadT0) / 1000) : 0;
+  return [Brain.stepText || (Brain.phase === 'Restarting' ? 'Starting again another way' : 'Starting the model on your graphics chip'), secs >= 3 ? `${secs} s` : ''].filter(Boolean).join(' · ');
+}
+function brainDetails() {
+  return [`Lumen v21 · ${navigator.userAgent}`, `Model ${Brain.modelId(Brain.loadingKey || S.model)} · memory ${ctxTarget(Brain.model(S.model))} · ${Brain.noWorker ? 'main page' : 'worker'} · GPU ${Brain.gpu || 'unknown'}${Brain.f16 ? ' (f16)' : ''} · storage ${Brain.backendFor(S.model)}`, ...Brain.trace].join('\n');
+}
+setInterval(() => { if (Brain.state === 'loading') { const step = els.brainCard.querySelector('.load-step'); if (step) step.textContent = loadStep(); } }, 1000);
 /* The start screen, like Claude's: a few categories under the message box; one opens a short list of ready prompts. */
 const CHIP_CATS = [
   { id: 'learn', icon: 'book', label: 'Learn', use: 'school', items: [

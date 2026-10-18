@@ -115,7 +115,7 @@ They are only names: the models are the same Qwen3.5 models as before, unchanged
 
 **Fixed glitches** found by the new tests: "5 foots" (now "5 feet", "10 inches", "metres per second"); "what day is 25 December 2026?" answered with today's date; a short one-page PDF was refused as "a scan"; buttons on the download card could miss a click while the progress moved; backups now include projects and styles and never temporary chats.
 
-**Tests.** The folder `tests/` has 78 end-to-end tests (`node tests/run.mjs`, see `tests/README.md`). They drive the real page in Chromium with a pretend AI engine that reads and checks model files exactly the way WebLLM does, and pretend versions of Hugging Face and Wikipedia, so they need no graphics chip and no internet.
+**Tests.** The folder `tests/` has 82 end-to-end tests (`node tests/run.mjs`, see `tests/README.md`). They drive the real page in Chromium with a pretend AI engine that reads and checks model files exactly the way WebLLM does, and pretend versions of Hugging Face and Wikipedia, so they need no graphics chip and no internet.
 
 ## What is new in version 17: a restart guard and a stronger model
 
@@ -244,6 +244,7 @@ Never sent: your chats, files, memory, saved notes, name, rules or email address
 | "This browser can't run the AI model" | Use Chrome 113+, or update to macOS 26 for Safari. |
 | "Graphics chip ran out of memory" | Close other tabs and apps, choose a smaller Memory size, or pick a smaller model in Settings. |
 | The download stopped | Check the internet and click Try again. Finished parts are kept. |
+| "Starting the model on your graphics chip" stays at 0% | Since version 21 Lumen notices this after 40 seconds and starts the model again another way (without the background worker). Close other Lumen tabs (two copies of a big model do not fit in the graphics memory), quit and reopen the browser, or press Stop and choose a smaller model: that now works at once. If it still fails, open "Details" on the error card, press "Copy the details" and send them. |
 | The model sits at 0% or will not start | Lumen now notices this by itself. If nothing happens for a minute it restarts the loading once, then tells you what it found. The usual causes: **Lumen is open in another tab or window** (close the other one and reload), a **network that blocks the model server** (some school and work networks do; try your phone hotspot), or **not enough memory** (close other tabs and apps). If it still fails, press "Delete the saved model and start over". |
 | The model downloads again every time | Don't use a private window. Chrome may also clear site data when the disk is nearly full. |
 | It said a file was broken and downloaded the model again and again | Fixed in version 18. Lumen now checks every file and downloads only a broken one again. Settings → Model → **Check the saved files** does it by hand. If the browser keeps damaging files, Lumen saves the model another way by itself. |
